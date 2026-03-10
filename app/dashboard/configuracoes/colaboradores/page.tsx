@@ -353,9 +353,10 @@ export default function ColaboradoresPage() {
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
         title="Importar Colaboradores"
-        templateHeaders={['nome', 'setor']}
+        templateHeaders={['Nome', 'Setor']}
         templateFilename="template_colaboradores.xlsx"
-        sampleRow={{ nome: 'João Silva', setor: 'TI' }}
+        templateTitle="TrainHub — Template de Importação: Colaboradores"
+        sampleRow={{ Nome: 'João Silva', Setor: 'TI' }}
         columns={[
           { key: 'nome', label: 'Nome' },
           { key: 'setor', label: 'Setor' },

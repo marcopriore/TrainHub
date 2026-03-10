@@ -48,6 +48,23 @@ interface TreinamentoImportDialogProps {
   onSuccess: () => void
 }
 
+const HEADER_ALIASES_PARCEIRO: Record<string, string[]> = {
+  nome: ['Nome do Treinamento', 'nome', 'Nome'],
+  conteudo: ['Conteúdo Programático', 'conteudo'],
+  objetivo: ['Objetivo', 'objetivo'],
+  carga_horaria: ['Carga Horária (horas)', 'carga_horaria'],
+  empresa_parceira: ['Empresa Parceira', 'empresa_parceira'],
+  quantidade_pessoas: ['Quantidade de Pessoas', 'quantidade_pessoas'],
+  data_treinamento: ['Data do Treinamento (DD/MM/AAAA)', 'data_treinamento'],
+  indice_satisfacao: ['Índice de Satisfação (%)', 'indice_satisfacao'],
+  indice_aprovacao: ['Índice de Aprovação (%)', 'indice_aprovacao'],
+}
+const HEADER_ALIASES_COLABORADOR: Record<string, string[]> = {
+  ...HEADER_ALIASES_PARCEIRO,
+  colaboradores: ['Colaboradores (separados por ;)', 'colaboradores'],
+}
+delete (HEADER_ALIASES_COLABORADOR as Record<string, unknown>).quantidade_pessoas
+
 function parseDateDDMMYYYY(str: string): Date | null {
   const match = String(str || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
   if (!match) return null
@@ -121,59 +138,67 @@ export function TreinamentoImportDialog({
 
   const handleDownloadTemplate = () => {
     if (importType === 'parceiro') {
+      const headers = [
+        'Nome do Treinamento',
+        'Conteúdo Programático',
+        'Objetivo',
+        'Carga Horária (horas)',
+        'Empresa Parceira',
+        'Quantidade de Pessoas',
+        'Data do Treinamento (DD/MM/AAAA)',
+        'Índice de Satisfação (%)',
+        'Índice de Aprovação (%)',
+      ]
       downloadTemplate(
-        [
-          'nome',
-          'conteudo',
-          'objetivo',
-          'carga_horaria',
-          'empresa_parceira',
-          'quantidade_pessoas',
-          'data_treinamento',
-          'indice_satisfacao',
-          'indice_aprovacao',
-        ],
+        headers,
         {
-          nome: 'Gestão de Projetos',
-          conteudo: 'Módulos 1 a 5',
-          objetivo: 'Capacitar equipe',
-          carga_horaria: '8',
-          empresa_parceira: 'Empresa ABC',
-          quantidade_pessoas: '25',
-          data_treinamento: '15/03/2025',
-          indice_satisfacao: '90',
-          indice_aprovacao: '95',
+          'Nome do Treinamento': 'Gestão de Projetos',
+          'Conteúdo Programático': 'Módulos 1 a 5',
+          'Objetivo': 'Capacitar equipe',
+          'Carga Horária (horas)': '8',
+          'Empresa Parceira': 'Empresa ABC',
+          'Quantidade de Pessoas': '25',
+          'Data do Treinamento (DD/MM/AAAA)': '15/03/2025',
+          'Índice de Satisfação (%)': '90',
+          'Índice de Aprovação (%)': '95',
         },
-        'template_treinamentos_parceiro.xlsx'
+        'template_treinamentos_parceiro.xlsx',
+        'TrainHub — Template de Importação: Treinamentos Parceiro',
+        [25, 40, 40, 25, 25, 25, 28, 22, 22]
       )
     } else {
+      const headers = [
+        'Nome do Treinamento',
+        'Conteúdo Programático',
+        'Objetivo',
+        'Carga Horária (horas)',
+        'Empresa Parceira',
+        'Data do Treinamento (DD/MM/AAAA)',
+        'Índice de Satisfação (%)',
+        'Índice de Aprovação (%)',
+        'Colaboradores (separados por ;)',
+      ]
       downloadTemplate(
-        [
-          'nome',
-          'conteudo',
-          'objetivo',
-          'carga_horaria',
-          'empresa_parceira',
-          'data_treinamento',
-          'indice_satisfacao',
-          'indice_aprovacao',
-          'colaboradores',
-        ],
+        headers,
         {
-          nome: 'Treinamento Interno',
-          conteudo: 'Conteúdo do treinamento',
-          objetivo: 'Objetivo',
-          carga_horaria: '4',
-          empresa_parceira: 'Empresa XYZ',
-          data_treinamento: '20/03/2025',
-          indice_satisfacao: '85',
-          indice_aprovacao: '90',
-          colaboradores: 'João Silva;Maria Santos',
+          'Nome do Treinamento': 'Treinamento Interno',
+          'Conteúdo Programático': 'Conteúdo do treinamento',
+          'Objetivo': 'Objetivo',
+          'Carga Horária (horas)': '4',
+          'Empresa Parceira': 'Empresa XYZ',
+          'Data do Treinamento (DD/MM/AAAA)': '20/03/2025',
+          'Índice de Satisfação (%)': '85',
+          'Índice de Aprovação (%)': '90',
+          'Colaboradores (separados por ;)': 'João Silva;Maria Santos',
         },
-        'template_treinamentos_colaborador.xlsx'
+        'template_treinamentos_colaborador.xlsx',
+        'TrainHub — Template de Importação: Treinamentos Colaborador',
+        [25, 40, 40, 25, 25, 28, 22, 22, 40]
       )
     }
   }
+
+  const headerAliases = importType === 'parceiro' ? HEADER_ALIASES_PARCEIRO : HEADER_ALIASES_COLABORADOR
 
   const validateAndProcess = (dataRows: Record<string, unknown>[]) => {
     const errs: string[] = []
@@ -183,15 +208,15 @@ export function TreinamentoImportDialog({
       for (let i = 0; i < dataRows.length; i++) {
         const row = dataRows[i]!
         const linha = i + 2
-        const nome = String(getExcelValue(row, 'nome') ?? '').trim()
-        const conteudo = String(getExcelValue(row, 'conteudo') ?? '').trim()
-        const objetivo = String(getExcelValue(row, 'objetivo') ?? '').trim()
-        const cargaHoraria = Number(getExcelValue(row, 'carga_horaria'))
-        const empresaNome = String(getExcelValue(row, 'empresa_parceira') ?? '').trim()
-        const quantidadePessoas = Number(getExcelValue(row, 'quantidade_pessoas'))
-        const dataStr = String(getExcelValue(row, 'data_treinamento') ?? '').trim()
-        const indiceSatisfacao = Number(getExcelValue(row, 'indice_satisfacao'))
-        const indiceAprovacao = Number(getExcelValue(row, 'indice_aprovacao'))
+        const nome = String(getExcelValue(row, 'nome', headerAliases) ?? '').trim()
+        const conteudo = String(getExcelValue(row, 'conteudo', headerAliases) ?? '').trim()
+        const objetivo = String(getExcelValue(row, 'objetivo', headerAliases) ?? '').trim()
+        const cargaHoraria = Number(getExcelValue(row, 'carga_horaria', headerAliases))
+        const empresaNome = String(getExcelValue(row, 'empresa_parceira', headerAliases) ?? '').trim()
+        const quantidadePessoas = Number(getExcelValue(row, 'quantidade_pessoas', headerAliases))
+        const dataStr = String(getExcelValue(row, 'data_treinamento', headerAliases) ?? '').trim()
+        const indiceSatisfacao = Number(getExcelValue(row, 'indice_satisfacao', headerAliases))
+        const indiceAprovacao = Number(getExcelValue(row, 'indice_aprovacao', headerAliases))
 
         if (!nome) {
           errs.push(`Linha ${linha}: Campo 'nome' obrigatório`)
@@ -258,15 +283,15 @@ export function TreinamentoImportDialog({
       for (let i = 0; i < dataRows.length; i++) {
         const row = dataRows[i]!
         const linha = i + 2
-        const nome = String(getExcelValue(row, 'nome') ?? '').trim()
-        const conteudo = String(getExcelValue(row, 'conteudo') ?? '').trim()
-        const objetivo = String(getExcelValue(row, 'objetivo') ?? '').trim()
-        const cargaHoraria = Number(getExcelValue(row, 'carga_horaria'))
-        const empresaNome = String(getExcelValue(row, 'empresa_parceira') ?? '').trim()
-        const dataStr = String(getExcelValue(row, 'data_treinamento') ?? '').trim()
-        const indiceSatisfacao = Number(getExcelValue(row, 'indice_satisfacao'))
-        const indiceAprovacao = Number(getExcelValue(row, 'indice_aprovacao'))
-        const colaboradoresStr = String(getExcelValue(row, 'colaboradores') ?? '').trim()
+        const nome = String(getExcelValue(row, 'nome', headerAliases) ?? '').trim()
+        const conteudo = String(getExcelValue(row, 'conteudo', headerAliases) ?? '').trim()
+        const objetivo = String(getExcelValue(row, 'objetivo', headerAliases) ?? '').trim()
+        const cargaHoraria = Number(getExcelValue(row, 'carga_horaria', headerAliases))
+        const empresaNome = String(getExcelValue(row, 'empresa_parceira', headerAliases) ?? '').trim()
+        const dataStr = String(getExcelValue(row, 'data_treinamento', headerAliases) ?? '').trim()
+        const indiceSatisfacao = Number(getExcelValue(row, 'indice_satisfacao', headerAliases))
+        const indiceAprovacao = Number(getExcelValue(row, 'indice_aprovacao', headerAliases))
+        const colaboradoresStr = String(getExcelValue(row, 'colaboradores', headerAliases) ?? '').trim()
 
         if (!nome) {
           errs.push(`Linha ${linha}: Campo 'nome' obrigatório`)

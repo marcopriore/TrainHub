@@ -31,7 +31,9 @@ interface ImportDialogProps {
   title: string
   templateHeaders: string[]
   templateFilename: string
+  templateTitle?: string
   sampleRow?: Record<string, string>
+  templateColWidths?: number[]
   columns: { key: string; label: string }[]
   onValidateAndImport: (
     rows: Record<string, unknown>[]
@@ -46,7 +48,9 @@ export function ImportDialog({
   title,
   templateHeaders,
   templateFilename,
+  templateTitle,
   sampleRow,
+  templateColWidths,
   columns,
   onValidateAndImport,
   onConfirmImport,
@@ -71,7 +75,7 @@ export function ImportDialog({
   }
 
   const handleDownloadTemplate = () => {
-    downloadTemplate(templateHeaders, sampleRow, templateFilename)
+    downloadTemplate(templateHeaders, sampleRow, templateFilename, templateTitle, templateColWidths)
   }
 
   const processFile = async (f: File) => {
