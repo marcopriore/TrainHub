@@ -1,0 +1,31 @@
+# TrainHub — Regras do Projeto
+
+## Stack
+- Next.js App Router + TypeScript
+- Tailwind CSS + shadcn/ui
+- Supabase (auth + banco de dados)
+- Recharts (gráficos)
+
+## Identidade Visual
+- Sempre respeitar as cores, fontes e componentes já definidos no projeto
+- Não criar novos padrões visuais sem antes verificar os componentes existentes
+- Cor de destaque principal: teal (#00C9A7)
+- Nunca substituir componentes existentes por versões genéricas
+
+## Regras de Desenvolvimento
+- Antes de criar qualquer arquivo novo, verificar se já existe algo similar no projeto
+- Nunca quebrar funcionalidades já implementadas
+- Sempre manter consistência com os padrões de código existentes
+- Usar TypeScript estrito — sem uso de "any"
+- Componentes reutilizáveis sempre em /components
+- Lógica de negócio separada da UI
+
+## Autenticação
+- Autenticação via Supabase + Google OAuth
+- Todas as rotas exceto /login são protegidas por middleware
+- Redirecionamento para /login se não autenticado
+
+## Boas Práticas
+- Tratar erros em todas as chamadas ao Supabase
+- Variáveis de ambiente sempre via process.env
+- Nunca expor secret keys no frontend
