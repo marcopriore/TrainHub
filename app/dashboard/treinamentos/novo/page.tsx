@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { PlusCircle, Trash2, Building2, Users } from 'lucide-react'
+import { PlusCircle, Trash2, Building2, Users, FileSpreadsheet } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TreinamentoImportDialog } from '@/components/treinamento-import-dialog'
 
 // ---------- Schemas ----------
 const baseSchema = z.object({
@@ -94,6 +95,10 @@ export default function NovoTreinamentoPage() {
   const router = useRouter()
   const [empresas, setEmpresas] = useState<EmpresaParceira[]>([])
   const [colaboradores, setColaboradores] = useState<ColaboradorWithSetor[]>([])
+  const [treinamentosExistentes, setTreinamentosExistentes] = useState<
+    { nome: string; data_treinamento: string }[]
+  >([])
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -121,6 +126,24 @@ export default function NovoTreinamentoPage() {
     loadData()
   }, [])
 
+  const fetchTreinamentosExistentes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('treinamentos')
+        .select('nome, data_treinamento')
+      if (error) throw error
+      setTreinamentosExistentes((data as { nome: string; data_treinamento: string }[]) ?? [])
+    } catch (err) {
+      console.error('Erro ao carregar treinamentos:', err)
+      setTreinamentosExistentes([])
+    }
+  }
+
+  const handleOpenImport = () => {
+    fetchTreinamentosExistentes()
+    setImportDialogOpen(true)
+  }
+
   const formatColaboradorLabel = (c: ColaboradorWithSetor) => {
     const setor = c.setores?.nome ?? 'Sem setor'
     return `${c.nome} (${setor})`
@@ -128,13 +151,19 @@ export default function NovoTreinamentoPage() {
 
   return (
     <div className="max-w-3xl mx-auto flex flex-col gap-6">
-      <div>
-        <h1 className="font-serif text-2xl font-bold text-foreground">
-          Registrar Treinamento
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Preencha os dados do treinamento realizado
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-serif text-2xl font-bold text-foreground">
+            Registrar Treinamento
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Preencha os dados do treinamento realizado
+          </p>
+        </div>
+        <Button variant="outline" onClick={handleOpenImport} className="gap-2 shrink-0">
+          <FileSpreadsheet className="w-4 h-4" />
+          Importar Planilha
+        </Button>
       </div>
 
       <Tabs defaultValue="parceiro" className="w-full">
@@ -177,6 +206,71 @@ export default function NovoTreinamentoPage() {
           />
         </TabsContent>
       </Tabs>
+
+      <TreinamentoImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        empresas={empresas}
+        colaboradores={colaboradores.map((c) => ({ id: c.id, nome: c.nome }))}
+        treinamentosExistentes={treinamentosExistentes}
+        onImportParceiro={async (data) => {
+          const supabaseClient = createClient()
+          for (const row of data) {
+            const { error } = await supabaseClient
+              .from('treinamentos')
+              .insert({
+                tipo: 'parceiro',
+                nome: row.nome,
+                conteudo: row.conteudo ?? '',
+                objetivo: row.objetivo ?? '',
+                carga_horaria: row.carga_horaria,
+                empresa_parceira_id: row.empresa_parceira_id,
+                quantidade_pessoas: row.quantidade_pessoas,
+                data_treinamento: row.data_treinamento,
+                indice_satisfacao: row.indice_satisfacao,
+                indice_aprovacao: row.indice_aprovacao,
+              })
+            if (error) throw error
+          }
+        }}
+        onImportColaborador={async (data) => {
+          const supabaseClient = createClient()
+          for (const row of data) {
+            const { data: inserted, error: err1 } = await supabaseClient
+              .from('treinamentos')
+              .insert({
+                tipo: 'colaborador',
+                nome: row.nome,
+                conteudo: row.conteudo ?? '',
+                objetivo: row.objetivo ?? '',
+                carga_horaria: row.carga_horaria,
+                empresa_parceira_id: row.empresa_parceira_id,
+                data_treinamento: row.data_treinamento,
+                indice_satisfacao: row.indice_satisfacao,
+                indice_aprovacao: row.indice_aprovacao,
+              })
+              .select('id')
+              .single()
+            if (err1) throw err1
+            const treinamentoId = (inserted as { id: string }).id
+            const colabIds = row.colaborador_ids as string[]
+            if (colabIds?.length) {
+              const rows = colabIds.map((colaborador_id: string) => ({
+                treinamento_id: treinamentoId,
+                colaborador_id,
+              }))
+              const { error: err2 } = await supabaseClient
+                .from('treinamento_colaboradores')
+                .insert(rows)
+              if (err2) throw err2
+            }
+          }
+        }}
+        onSuccess={() => {
+          toast.success('Treinamentos importados com sucesso.')
+          router.push('/dashboard/treinamentos')
+        }}
+      />
     </div>
   )
 }

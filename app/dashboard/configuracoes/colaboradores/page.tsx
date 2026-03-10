@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, FileSpreadsheet } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -40,6 +40,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { ImportDialog } from '@/components/import-dialog'
+import { getExcelValue } from '@/lib/excel-utils'
 
 interface Setor {
   id: string
@@ -65,6 +67,7 @@ export default function ColaboradoresPage() {
   const [nome, setNome] = useState('')
   const [setorId, setSetorId] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
 
   const supabase = createClient()
 
@@ -215,10 +218,16 @@ export default function ColaboradoresPage() {
             Gerencie os colaboradores cadastrados na plataforma
           </p>
         </div>
-        <Button onClick={openNewDialog} className="w-full sm:w-auto shrink-0">
-          <Plus className="w-4 h-4" />
-          Novo Colaborador
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)} className="gap-2">
+            <FileSpreadsheet className="w-4 h-4" />
+            Importar Planilha
+          </Button>
+          <Button onClick={openNewDialog} className="w-full sm:w-auto shrink-0">
+            <Plus className="w-4 h-4" />
+            Novo Colaborador
+          </Button>
+        </div>
       </div>
 
       <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
@@ -339,6 +348,69 @@ export default function ColaboradoresPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        title="Importar Colaboradores"
+        templateHeaders={['nome', 'setor']}
+        templateFilename="template_colaboradores.xlsx"
+        sampleRow={{ nome: 'João Silva', setor: 'TI' }}
+        columns={[
+          { key: 'nome', label: 'Nome' },
+          { key: 'setor', label: 'Setor' },
+        ]}
+        onValidateAndImport={async (rows) => {
+          const errors: string[] = []
+          const setoresMap = new Map(setores.map((s) => [s.nome.toLowerCase(), s]))
+          const nomesExistentes = new Set(colaboradores.map((c) => c.nome.toLowerCase()))
+          const validData: Record<string, unknown>[] = []
+
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i]
+            const linha = i + 2
+            const nome = String(getExcelValue(row, 'nome') ?? '').trim()
+            const setorNome = String(getExcelValue(row, 'setor') ?? '').trim()
+
+            if (!nome) {
+              errors.push(`Linha ${linha}: Campo 'nome' obrigatório`)
+              continue
+            }
+            if (!setorNome) {
+              errors.push(`Linha ${linha}: Campo 'setor' obrigatório`)
+              continue
+            }
+            const setor = setoresMap.get(setorNome.toLowerCase())
+            if (!setor) {
+              errors.push(`Linha ${linha}: Setor "${setorNome}" não encontrado. Cadastre o setor antes de importar.`)
+              continue
+            }
+            if (nomesExistentes.has(nome.toLowerCase())) {
+              errors.push(`Linha ${linha}: Colaborador "${nome}" já existe no sistema`)
+              continue
+            }
+            nomesExistentes.add(nome.toLowerCase())
+            validData.push({ nome, setor_id: setor.id, setor: setorNome })
+          }
+
+          if (errors.length > 0) {
+            return { valid: false, errors }
+          }
+          return { valid: true, errors: [], data: validData }
+        }}
+        onConfirmImport={async (data) => {
+          const toInsert = data.map((row) => ({
+            nome: row.nome,
+            setor_id: row.setor_id,
+          }))
+          const { error } = await supabase.from('colaboradores').insert(toInsert)
+          if (error) throw error
+        }}
+        onSuccess={() => {
+          toast.success('Colaboradores importados com sucesso.')
+          fetchColaboradores()
+        }}
+      />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
