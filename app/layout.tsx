@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Sora, DM_Sans } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from '@/components/ui/sonner'
+import { UserProvider } from '@/components/user-provider'
 import './globals.css'
 
 const sora = Sora({
@@ -30,9 +31,11 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={`${sora.variable} ${dmSans.variable}`}>
       <body className="font-sans antialiased">
-        {children}
-        <Toaster richColors position="top-right" />
-        <Analytics />
+        <UserProvider>
+          {children}
+          <Toaster richColors position="top-right" />
+          <Analytics />
+        </UserProvider>
       </body>
     </html>
   )

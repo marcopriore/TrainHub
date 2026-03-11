@@ -1,9 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase'
+import { useUser } from '@/lib/use-user'
 import {
   GraduationCap,
   LayoutDashboard,
@@ -52,17 +52,19 @@ interface SidebarProps {
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname()
-  const router = useRouter()
+  const { user, loading } = useUser()
 
-  const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
-  }
+  const initials = user?.nome
+    ? user.nome
+        .split(/\s+/)
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
+    : '—'
 
   return (
-    <div className="flex flex-col h-full bg-sidebar text-sidebar-foreground">
+    <div className="flex flex-col h-full bg-sidebar text-sidebar-foreground pointer-events-auto">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-6 border-b border-sidebar-border">
         <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0 shadow-md shadow-primary/30">
@@ -120,16 +122,26 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       <div className="px-3 py-4 border-t border-sidebar-border">
         <div className="flex items-center gap-3 px-3 py-2 mb-1">
           <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-semibold text-primary">AD</span>
+            <span className="text-xs font-semibold text-primary">{initials}</span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">Admin</p>
-            <p className="text-xs text-sidebar-foreground/50 truncate">admin@trainhub.com</p>
+            <p className="text-sm font-medium text-white truncate">
+              {loading ? 'Carregando...' : user?.nome ?? '—'}
+            </p>
+            <p className="text-xs text-sidebar-foreground/50 truncate">
+              {user?.email ?? '—'}
+            </p>
           </div>
         </div>
         <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200 group"
+          type="button"
+          onClick={async () => {
+            const { createClient } = await import('@/lib/supabase')
+            const supabase = createClient()
+            await supabase.auth.signOut()
+            window.location.href = '/login'
+          }}
+          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200 group cursor-pointer"
         >
           <LogOut className="w-4.5 h-4.5 flex-shrink-0 group-hover:text-red-400" />
           Sair
@@ -143,14 +155,14 @@ export function Sidebar({ isMobileOpen, onClose }: SidebarProps) {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-64 min-h-screen sticky top-0 flex-shrink-0">
+      <aside className="hidden lg:flex flex-col w-64 min-h-screen sticky top-0 flex-shrink-0 pointer-events-auto">
         <SidebarContent />
       </aside>
 
-      {/* Mobile overlay */}
+      {/* Mobile overlay - lg:pointer-events-none evita bloquear cliques no desktop */}
       {isMobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden lg:pointer-events-none"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -159,7 +171,7 @@ export function Sidebar({ isMobileOpen, onClose }: SidebarProps) {
       {/* Mobile sidebar drawer */}
       <aside
         className={cn(
-          'fixed top-0 left-0 z-50 h-full w-72 transition-transform duration-300 ease-in-out lg:hidden',
+          'fixed top-0 left-0 z-50 h-full w-72 transition-transform duration-300 ease-in-out lg:hidden pointer-events-auto',
           isMobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
         aria-label="Menu de navegação"
@@ -194,7 +206,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background pointer-events-auto">
       <Sidebar isMobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0">
         <MobileTopBar onMenuOpen={() => setMobileOpen(true)} />
