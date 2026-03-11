@@ -86,10 +86,18 @@ export function getExcelValue(
   return typeof v === 'string' ? (v as string).trim() : v
 }
 
+export interface ParseExcelOptions {
+  /** Se true, ignora a primeira linha (título) e usa a segunda como cabeçalho */
+  skipTitleRow?: boolean
+}
+
 /**
  * Lê um arquivo Excel e retorna os dados da primeira planilha como array de objetos
  */
-export function parseExcelFile(file: File): Promise<Record<string, unknown>[]> {
+export function parseExcelFile(
+  file: File,
+  options?: ParseExcelOptions
+): Promise<Record<string, unknown>[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (e) => {
@@ -102,10 +110,19 @@ export function parseExcelFile(file: File): Promise<Record<string, unknown>[]> {
         const workbook = XLSX.read(data, { type: 'binary' })
         const sheetName = workbook.SheetNames[0]
         const sheet = workbook.Sheets[sheetName]
-        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+        const sheetOptions: XLSX.JSON2SheetOpts & { range?: string } = {
           raw: false,
           defval: '',
-        })
+        }
+        if (options?.skipTitleRow) {
+          const ref = (sheet['!ref'] as string) || 'A1:Z100'
+          const match = ref.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
+          if (match) {
+            const startRow = parseInt(match[2], 10) + 1
+            sheetOptions.range = `${match[1]}${startRow}:${match[3]}${match[4]}`
+          }
+        }
+        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, sheetOptions)
         resolve(json)
       } catch (err) {
         reject(err)
@@ -242,4 +259,69 @@ export function exportReportToExcel(
   }
 
   XLSX.writeFile(wb, `trainhub-relatorio-${hoje}.xlsx`)
+}
+
+const instructionStyle = {
+  fill: { fgColor: { rgb: 'F8FAFC' } },
+  font: { name: 'Calibri', sz: 11, color: { rgb: COLORS.textDark } },
+  alignment: { wrapText: true as const, vertical: 'top' as const },
+}
+const instructionTitleStyle = {
+  fill: { fgColor: { rgb: 'F8FAFC' } },
+  font: { name: 'Calibri', sz: 12, bold: true, color: { rgb: COLORS.textDark } },
+  alignment: { vertical: 'top' as const },
+}
+
+/**
+ * Gera e faz download do template de importação de usuários
+ */
+export function downloadUserImportTemplate(perfilNames: string[]): void {
+  const wb = XLSX.utils.book_new()
+  const headers = ['Nome Completo', 'E-mail', 'Perfil']
+  const title = 'Importação de Usuários — TrainHub'
+
+  const aoa: (string | number | XLSX.CellObject)[][] = [
+    [cell(title, titleStyle)],
+    headers.map((h) => cell(h, headerStyle)),
+  ]
+  for (let i = 0; i < 10; i++) {
+    aoa.push(
+      headers.map(() => cell('', dataRowStyle(i % 2 === 1)))
+    )
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }]
+  ws['!rows'] = [
+    { hpt: 27 },
+    { hpt: 24 },
+    ...Array(10).fill({ hpt: 17 }),
+  ]
+  ws['!cols'] = [{ wch: 30 }, { wch: 35 }, { wch: 20 }]
+  ws['!sheetViews'] = [{ showGridLines: false }]
+
+  const instrucoes: string[][] = [
+    ['Instruções para importação de usuários'],
+    [''],
+    ['• Perfil: deve ser exatamente um dos perfis cadastrados no tenant.'],
+    ['  Perfis disponíveis: ' + (perfilNames.length ? perfilNames.join(', ') : '(nenhum cadastrado)')],
+    [''],
+    ['• E-mail: deve ser único no sistema. Não use e-mails já cadastrados.'],
+    [''],
+    ['• Não altere os cabeçalhos da planilha (Nome Completo, E-mail, Perfil).'],
+    [''],
+    ['• Após preencher, faça o upload na Etapa 2 do assistente.'],
+  ]
+  const wsInstrucoes = XLSX.utils.aoa_to_sheet(
+    instrucoes.map((row, ri) =>
+      row.map((val) => cell(val, ri === 0 ? instructionTitleStyle : instructionStyle))
+    )
+  )
+  wsInstrucoes['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }]
+  wsInstrucoes['!cols'] = [{ wch: 80 }]
+  wsInstrucoes['!sheetViews'] = [{ showGridLines: false }]
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Usuários')
+  XLSX.utils.book_append_sheet(wb, wsInstrucoes, 'Instruções')
+  XLSX.writeFile(wb, 'template-importacao-usuarios.xlsx')
 }

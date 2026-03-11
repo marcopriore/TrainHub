@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   Plus,
-  Pencil,
   Power,
   PowerOff,
   Building2,
+  Pencil,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -30,12 +31,6 @@ import {
   SheetTitle,
   SheetFooter,
 } from '@/components/ui/sheet'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import {
   Select,
   SelectContent,
@@ -61,19 +56,6 @@ interface Tenant {
   criado_em: string
 }
 
-interface Perfil {
-  id: string
-  nome: string
-}
-
-interface Usuario {
-  id: string
-  nome: string
-  email: string
-  ativo: boolean
-  perfis: { nome: string } | null
-}
-
 const tenantSchema = z.object({
   nome: z.string().min(1, 'Nome obrigatório'),
   slug: z
@@ -83,14 +65,7 @@ const tenantSchema = z.object({
   ativo: z.boolean(),
 })
 
-const addUserSchema = z.object({
-  nome: z.string().min(1, 'Nome obrigatório'),
-  email: z.string().min(1, 'E-mail obrigatório').email('E-mail inválido'),
-  perfil_id: z.string().min(1, 'Selecione o perfil'),
-})
-
 type TenantFormData = z.infer<typeof tenantSchema>
-type AddUserFormData = z.infer<typeof addUserSchema>
 
 function slugify(text: string): string {
   return text
@@ -101,31 +76,17 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, '')
 }
 
-function generateTempPassword(length = 8): string {
-  const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789'
-  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-}
-
 export default function TenantsPage() {
   const router = useRouter()
   const { user, loading: userLoading } = useUser()
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [loading, setLoading] = useState(true)
-  const [sheetOpen, setSheetOpen] = useState<'novo' | string | null>(null)
-  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null)
-  const [usuarios, setUsuarios] = useState<Usuario[]>([])
-  const [perfis, setPerfis] = useState<Perfil[]>([])
-  const [addUserOpen, setAddUserOpen] = useState(false)
-  const [tempPassword, setTempPassword] = useState<string | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
   const [autoSlug, setAutoSlug] = useState(true)
 
   const tenantForm = useForm<TenantFormData>({
     resolver: zodResolver(tenantSchema),
     defaultValues: { nome: '', slug: '', ativo: true },
-  })
-  const addUserForm = useForm<AddUserFormData>({
-    resolver: zodResolver(addUserSchema),
-    defaultValues: { nome: '', email: '', perfil_id: '' },
   })
 
   const nome = tenantForm.watch('nome')
@@ -137,7 +98,7 @@ export default function TenantsPage() {
   }, [user, userLoading, router])
 
   useEffect(() => {
-    if (autoSlug && nome && sheetOpen === 'novo') {
+    if (autoSlug && nome && sheetOpen) {
       tenantForm.setValue('slug', slugify(nome))
     }
   }, [nome, autoSlug, sheetOpen, tenantForm])
@@ -160,117 +121,49 @@ export default function TenantsPage() {
     }
   }
 
-  const fetchUsuarios = async (tenantId: string) => {
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('usuarios')
-        .select('id, nome, email, ativo, perfis(nome)')
-        .eq('tenant_id', tenantId)
-        .order('nome')
-
-      if (error) throw error
-      setUsuarios((data as Usuario[]) ?? [])
-    } catch {
-      setUsuarios([])
-    }
-  }
-
-  const fetchPerfis = async (tenantId: string) => {
-    try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('perfis')
-        .select('id, nome')
-        .eq('tenant_id', tenantId)
-        .order('nome')
-
-      if (error) throw error
-      setPerfis((data as Perfil[]) ?? [])
-    } catch {
-      setPerfis([])
-    }
-  }
-
   useEffect(() => {
     if (user?.isMaster()) {
       fetchTenants()
     }
   }, [user?.isMaster()])
 
-  useEffect(() => {
-    if (sheetOpen && sheetOpen !== 'novo') {
-      fetchUsuarios(sheetOpen)
-      fetchPerfis(sheetOpen)
-    }
-  }, [sheetOpen])
-
   const openNovoSheet = () => {
-    setEditingTenant(null)
     tenantForm.reset({ nome: '', slug: '', ativo: true })
     setAutoSlug(true)
-    setSheetOpen('novo')
-  }
-
-  const openEditarSheet = (tenant: Tenant) => {
-    setEditingTenant(tenant)
-    tenantForm.reset({
-      nome: tenant.nome,
-      slug: tenant.slug,
-      ativo: tenant.ativo,
-    })
-    setAutoSlug(false)
-    setSheetOpen(tenant.id)
+    setSheetOpen(true)
   }
 
   const closeSheet = () => {
-    setSheetOpen(null)
-    setEditingTenant(null)
-    setAddUserOpen(false)
-    setTempPassword(null)
+    setSheetOpen(false)
   }
 
   const onSaveTenant = async (data: TenantFormData) => {
     try {
       const supabase = createClient()
-      if (editingTenant) {
-        const { error } = await supabase
-          .from('tenants')
-          .update({ nome: data.nome, slug: data.slug, ativo: data.ativo })
-          .eq('id', editingTenant.id)
+      const { data: tenant, error: tenantError } = await supabase
+        .from('tenants')
+        .insert({ nome: data.nome, slug: data.slug, ativo: data.ativo })
+        .select('id')
+        .single()
 
-        if (error) {
-          if (error.code === '23505') toast.error('Slug já existe. Escolha outro.')
-          else toast.error(error.message)
-          return
-        }
-        toast.success('Tenant atualizado com sucesso.')
+      if (tenantError) {
+        if (tenantError.code === '23505') toast.error('Slug já existe. Escolha outro.')
+        else toast.error(tenantError.message)
+        return
+      }
+      if (!tenant) {
+        toast.error('Erro ao criar tenant')
+        return
+      }
+      const { error: perfilError } = await supabase.from('perfis').insert({
+        tenant_id: tenant.id,
+        nome: 'Admin',
+        is_admin: true,
+      })
+      if (perfilError) {
+        toast.error('Tenant criado, mas erro ao criar perfil padrão.')
       } else {
-        const { data: tenant, error: tenantError } = await supabase
-          .from('tenants')
-          .insert({ nome: data.nome, slug: data.slug, ativo: data.ativo })
-          .select('id')
-          .single()
-
-        if (tenantError) {
-          if (tenantError.code === '23505') toast.error('Slug já existe. Escolha outro.')
-          else toast.error(tenantError.message)
-          return
-        }
-        if (!tenant) {
-          toast.error('Erro ao criar tenant')
-          return
-        }
-        const { error: perfilError } = await supabase.from('perfis').insert({
-          tenant_id: tenant.id,
-          nome: 'Admin',
-          is_admin: true,
-        })
-        if (perfilError) {
-          toast.error('Tenant criado, mas erro ao criar perfil padrão.')
-        } else {
-          toast.success('Tenant criado com sucesso.')
-        }
+        toast.success('Tenant criado com sucesso.')
       }
       closeSheet()
       fetchTenants()
@@ -292,52 +185,6 @@ export default function TenantsPage() {
       fetchTenants()
     } catch {
       toast.error('Erro ao atualizar status')
-    }
-  }
-
-  const onAddUser = async (data: AddUserFormData) => {
-    if (!sheetOpen || sheetOpen === 'novo') return
-    try {
-      const senha = generateTempPassword()
-
-      const response = await fetch('/api/admin/criar-usuario', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nome: data.nome,
-          email: data.email,
-          senha,
-          tenant_id: sheetOpen,
-          perfil_id: data.perfil_id,
-        }),
-      })
-
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error ?? 'Erro ao criar usuário')
-
-      setTempPassword(senha)
-      toast.success('Usuário criado. Anote a senha temporária.')
-      addUserForm.reset({ nome: '', email: '', perfil_id: '' })
-      fetchUsuarios(sheetOpen)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erro ao criar usuário')
-    }
-  }
-
-  const toggleUsuarioAtivo = async (u: Usuario) => {
-    if (!sheetOpen || sheetOpen === 'novo') return
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('usuarios')
-        .update({ ativo: !u.ativo })
-        .eq('id', u.id)
-
-      if (error) throw error
-      toast.success(u.ativo ? 'Usuário desativado' : 'Usuário ativado')
-      fetchUsuarios(sheetOpen)
-    } catch {
-      toast.error('Erro ao atualizar usuário')
     }
   }
 
@@ -442,8 +289,10 @@ export default function TenantsPage() {
                   <TableCell className="text-muted-foreground">{formatDate(tenant.criado_em)}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="icon-sm" onClick={() => openEditarSheet(tenant)} aria-label="Editar tenant">
-                        <Pencil className="w-4 h-4" />
+                      <Button variant="ghost" size="icon-sm" asChild aria-label="Editar tenant">
+                        <Link href={`/dashboard/configuracoes/tenants/${tenant.id}`}>
+                          <Pencil className="w-4 h-4" />
+                        </Link>
                       </Button>
                       <Button
                         variant="ghost"
@@ -462,14 +311,12 @@ export default function TenantsPage() {
         )}
       </div>
 
-      {/* Sheet Novo / Editar Tenant */}
-      <Sheet open={!!sheetOpen} onOpenChange={(open) => !open && closeSheet()}>
+      {/* Sheet Novo Tenant */}
+      <Sheet open={sheetOpen} onOpenChange={(open) => !open && closeSheet()}>
         <SheetContent side="right" className="sm:max-w-lg overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>{editingTenant ? 'Editar Tenant' : 'Novo Tenant'}</SheetTitle>
-            <SheetDescription>
-              {editingTenant ? 'Atualize os dados do tenant' : 'Cadastre uma nova organização'}
-            </SheetDescription>
+            <SheetTitle>Novo Tenant</SheetTitle>
+            <SheetDescription>Cadastre uma nova organização</SheetDescription>
           </SheetHeader>
           <form
             onSubmit={tenantForm.handleSubmit(onSaveTenant)}
@@ -483,19 +330,17 @@ export default function TenantsPage() {
               )}
             </div>
             <div className="space-y-2">
-              {!editingTenant && (
-                <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <input type="checkbox" checked={autoSlug} onChange={(e) => setAutoSlug(e.target.checked)} />
-                  Gerar slug automaticamente
-                </label>
-              )}
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input type="checkbox" checked={autoSlug} onChange={(e) => setAutoSlug(e.target.checked)} />
+                Gerar slug automaticamente
+              </label>
               <Label htmlFor="tenant-slug">Slug *</Label>
               <Input
                 id="tenant-slug"
                 {...tenantForm.register('slug')}
                 placeholder="empresa-abc"
                 className="font-mono"
-                disabled={!editingTenant && autoSlug}
+                disabled={autoSlug}
               />
               <p className="text-xs text-muted-foreground">Apenas letras minúsculas, números e hífens</p>
               {tenantForm.formState.errors.slug && (
@@ -517,58 +362,6 @@ export default function TenantsPage() {
                 </SelectContent>
               </Select>
             </div>
-
-            {editingTenant && (
-              <div className="space-y-4 border-t pt-6">
-                <h3 className="font-semibold">Usuários do tenant</h3>
-                <Button type="button" size="sm" className="w-full" onClick={() => setAddUserOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Adicionar Usuário
-                </Button>
-                {usuarios.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">Nenhum usuário cadastrado</p>
-                ) : (
-                  <div className="rounded-lg border overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/30">
-                          <TableHead className="py-2">Nome</TableHead>
-                          <TableHead className="py-2">E-mail</TableHead>
-                          <TableHead className="py-2">Perfil</TableHead>
-                          <TableHead className="py-2">Status</TableHead>
-                          <TableHead className="py-2 w-[80px]">Ações</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {usuarios.map((u) => (
-                          <TableRow key={u.id}>
-                            <TableCell className="py-2 text-sm">{u.nome}</TableCell>
-                            <TableCell className="py-2 text-sm">{u.email}</TableCell>
-                            <TableCell className="py-2 text-sm">{u.perfis?.nome ?? '—'}</TableCell>
-                            <TableCell className="py-2">
-                              <Badge variant={u.ativo ? 'default' : 'secondary'} className="text-xs">
-                                {u.ativo ? 'Ativo' : 'Inativo'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="py-2">
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                onClick={() => toggleUsuarioAtivo(u)}
-                                title={u.ativo ? 'Desativar' : 'Ativar'}
-                              >
-                                {u.ativo ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </div>
-            )}
-
             <SheetFooter>
               <Button type="button" variant="outline" onClick={closeSheet}>
                 Cancelar
@@ -580,72 +373,6 @@ export default function TenantsPage() {
           </form>
         </SheetContent>
       </Sheet>
-
-      {/* Dialog Adicionar Usuário */}
-      <Dialog open={addUserOpen} onOpenChange={setAddUserOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Adicionar usuário</DialogTitle>
-          </DialogHeader>
-          {tempPassword && (
-            <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-sm">
-              <p className="font-medium text-amber-700 dark:text-amber-400">Senha temporária (anote):</p>
-              <p className="font-mono mt-1 break-all">{tempPassword}</p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-2"
-                onClick={() => {
-                  setTempPassword(null)
-                  setAddUserOpen(false)
-                }}
-              >
-                Fechar
-              </Button>
-            </div>
-          )}
-          <form onSubmit={addUserForm.handleSubmit(onAddUser)} className="space-y-4">
-            <div>
-              <Label>Nome</Label>
-              <Input {...addUserForm.register('nome')} placeholder="Nome completo" />
-              {addUserForm.formState.errors.nome && (
-                <p className="text-sm text-destructive mt-1">{addUserForm.formState.errors.nome.message}</p>
-              )}
-            </div>
-            <div>
-              <Label>E-mail</Label>
-              <Input {...addUserForm.register('email')} type="email" placeholder="email@exemplo.com" />
-              {addUserForm.formState.errors.email && (
-                <p className="text-sm text-destructive mt-1">{addUserForm.formState.errors.email.message}</p>
-              )}
-            </div>
-            <div>
-              <Label>Perfil</Label>
-              <Select
-                value={addUserForm.watch('perfil_id')}
-                onValueChange={(v) => addUserForm.setValue('perfil_id', v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o perfil" />
-                </SelectTrigger>
-                <SelectContent>
-                  {perfis.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {addUserForm.formState.errors.perfil_id && (
-                <p className="text-sm text-destructive mt-1">{addUserForm.formState.errors.perfil_id.message}</p>
-              )}
-            </div>
-            <Button type="submit" disabled={addUserForm.formState.isSubmitting}>
-              {addUserForm.formState.isSubmitting ? 'Criando...' : 'Criar usuário'}
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
