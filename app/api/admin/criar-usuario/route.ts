@@ -44,5 +44,37 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: dbError.message }, { status: 400 })
   }
 
+  // Se perfil não for Admin, criar ou atualizar colaborador com email para Minhas Trilhas
+  const { data: perfil } = await supabaseAdmin
+    .from('perfis')
+    .select('is_admin')
+    .eq('id', perfil_id)
+    .single()
+
+  if (perfil && !perfil.is_admin) {
+    const { data: existing } = await supabaseAdmin
+      .from('colaboradores')
+      .select('id')
+      .eq('tenant_id', tenant_id)
+      .eq('email', email)
+      .maybeSingle()
+
+    if (existing) {
+      await supabaseAdmin
+        .from('colaboradores')
+        .update({ nome, email })
+        .eq('id', existing.id)
+    } else {
+      const { error: colErr } = await supabaseAdmin.from('colaboradores').insert({
+        tenant_id,
+        nome,
+        email,
+      })
+      if (colErr) {
+        // Ignorar erro (ex: colaborador já existe) - usuário foi criado
+      }
+    }
+  }
+
   return NextResponse.json({ success: true, userId: authData.user.id })
 }

@@ -249,6 +249,18 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // Redirecionar para Minhas Trilhas se usuário tem apenas ver_minhas_trilhas (não admin/master, sem ver_dashboard_geral)
+  React.useEffect(() => {
+    if (!value.user || pathname !== '/dashboard') return
+    const u = value.user
+    const hasTrilhas = u.hasPermission('ver_minhas_trilhas')
+    const hasDashboard = u.hasPermission('ver_dashboard_geral')
+    const adminOrMaster = u.isAdmin() || u.isMaster()
+    if (hasTrilhas && !hasDashboard && !adminOrMaster) {
+      router.replace('/dashboard/minhas-trilhas')
+    }
+  }, [value.user, pathname, router])
+
   const contextValue: UserContextValue = {
     ...value,
     selectedTenantId: selectedTenant?.id ?? null,

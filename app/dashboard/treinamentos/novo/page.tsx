@@ -95,7 +95,9 @@ function FormField({
 export default function NovoTreinamentoPage() {
   const router = useRouter()
   const { user, getActiveTenantId } = useUser()
-  const canRegistrar = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('registrar_treinamento')
+  const canRegistrarParceiro = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('registrar_treinamento_parceiro')
+  const canRegistrarColaborador = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('registrar_treinamento_colaborador')
+  const canRegistrar = canRegistrarParceiro || canRegistrarColaborador
   const canImport = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('importar_planilha')
   const activeTenantId = getActiveTenantId()
   const [empresas, setEmpresas] = useState<EmpresaParceira[]>([])
@@ -189,24 +191,34 @@ export default function NovoTreinamentoPage() {
         )}
       </div>
 
-      <Tabs defaultValue="parceiro" className="w-full">
+      <Tabs
+        defaultValue={
+          canRegistrarParceiro ? 'parceiro' : canRegistrarColaborador ? 'colaborador' : 'parceiro'
+        }
+        className="w-full"
+      >
         <TabsList className="flex gap-1 bg-muted rounded-xl p-1.5 h-auto">
-          <TabsTrigger
-            value="parceiro"
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm"
-          >
-            <Building2 className="w-4 h-4" />
-            Parceiro (Externo)
-          </TabsTrigger>
-          <TabsTrigger
-            value="colaborador"
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm"
-          >
-            <Users className="w-4 h-4" />
-            Colaborador (Interno)
-          </TabsTrigger>
+          {canRegistrarParceiro && (
+            <TabsTrigger
+              value="parceiro"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm"
+            >
+              <Building2 className="w-4 h-4" />
+              Parceiro (Externo)
+            </TabsTrigger>
+          )}
+          {canRegistrarColaborador && (
+            <TabsTrigger
+              value="colaborador"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm"
+            >
+              <Users className="w-4 h-4" />
+              Colaborador (Interno)
+            </TabsTrigger>
+          )}
         </TabsList>
 
+        {canRegistrarParceiro && (
         <TabsContent value="parceiro" className="mt-6">
           <ParceiroForm
             empresas={empresas}
@@ -217,7 +229,9 @@ export default function NovoTreinamentoPage() {
             }}
           />
         </TabsContent>
+        )}
 
+        {canRegistrarColaborador && (
         <TabsContent value="colaborador" className="mt-6">
           <ColaboradorForm
             empresas={empresas}
@@ -230,6 +244,7 @@ export default function NovoTreinamentoPage() {
             }}
           />
         </TabsContent>
+        )}
       </Tabs>
 
       <TreinamentoImportDialog

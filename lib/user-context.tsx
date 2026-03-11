@@ -10,7 +10,8 @@ export const PERMISSOES = [
   'visualizar_empresas_parceiras',
   'editar_empresas_parceiras',
   'visualizar_historico',
-  'registrar_treinamento',
+  'registrar_treinamento_parceiro',
+  'registrar_treinamento_colaborador',
   'editar_treinamento',
   'excluir_treinamento',
   'importar_planilha',
@@ -22,6 +23,8 @@ export const PERMISSOES = [
   'gerenciar_colaboradores',
   'gerenciar_setores',
   'gerenciar_empresas_parceiras',
+  'ver_dashboard_geral',
+  'ver_minhas_trilhas',
 ] as const
 
 export const PERMISSOES_LABELS: Record<string, string> = {
@@ -32,7 +35,8 @@ export const PERMISSOES_LABELS: Record<string, string> = {
   visualizar_empresas_parceiras: 'Visualizar Empresas Parceiras',
   editar_empresas_parceiras: 'Editar/Criar Empresas Parceiras',
   visualizar_historico: 'Visualizar Histórico de Treinamentos',
-  registrar_treinamento: 'Registrar Treinamento',
+  registrar_treinamento_parceiro: 'Registrar Treinamento Parceiro',
+  registrar_treinamento_colaborador: 'Registrar Treinamento Colaborador',
   editar_treinamento: 'Editar Treinamento',
   excluir_treinamento: 'Excluir Treinamento',
   importar_planilha: 'Importação em massa via planilha',
@@ -40,6 +44,8 @@ export const PERMISSOES_LABELS: Record<string, string> = {
   exportar_excel: 'Exportar para Excel',
   gerenciar_usuarios: 'Gerenciar Usuários',
   gerenciar_perfis: 'Gerenciar Perfis de Acesso',
+  ver_dashboard_geral: 'Ver Dashboard Geral',
+  ver_minhas_trilhas: 'Ver Minhas Trilhas',
 }
 
 export type Permissao = (typeof PERMISSOES)[number]
@@ -88,6 +94,7 @@ const LEGACY_MAP: Record<string, string[]> = {
   gerenciar_colaboradores: ['visualizar_colaboradores', 'editar_colaboradores'],
   gerenciar_setores: ['visualizar_setores', 'editar_setores'],
   gerenciar_empresas_parceiras: ['visualizar_empresas_parceiras', 'editar_empresas_parceiras'],
+  registrar_treinamento: ['registrar_treinamento_parceiro', 'registrar_treinamento_colaborador'],
 }
 
 export function createUserWithHelpers(user: Omit<UserContextData, 'hasPermission' | 'isAdmin' | 'isMaster'>): UserContextData {

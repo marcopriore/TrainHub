@@ -19,14 +19,24 @@ import {
   Users,
   ChevronDown,
   Shield,
+  BookOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TenantSelector } from '@/components/tenant-selector'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
-const mainNavItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: null as string | null },
-  { href: '/dashboard/treinamentos/novo', label: 'Registrar Treinamento', icon: PlusCircle, permission: 'registrar_treinamento' },
+const mainNavItems: Array<{
+  href: string
+  label: string
+  icon: typeof LayoutDashboard
+  permission: string | null
+  dashboardOnly?: boolean
+  trilhasOnly?: boolean
+  registrarAny?: boolean
+}> = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'ver_dashboard_geral', dashboardOnly: true },
+  { href: '/dashboard/minhas-trilhas', label: 'Minhas Trilhas', icon: BookOpen, permission: 'ver_minhas_trilhas', trilhasOnly: true },
+  { href: '/dashboard/treinamentos/novo', label: 'Registrar Treinamento', icon: PlusCircle, permission: null, registrarAny: true },
   { href: '/dashboard/historico', label: 'Histórico de Treinamentos', icon: List, permission: null },
   { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart2, permission: null },
 ]
@@ -81,8 +91,17 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto" aria-label="Menu principal">
         <ul className="flex flex-col gap-1">
-          {mainNavItems.map(({ href, label, icon: Icon, permission }) => {
-            if (permission && !user?.hasPermission?.(permission) && !user?.isAdmin?.() && !user?.isMaster?.()) return null
+          {mainNavItems.map(({ href, label, icon: Icon, permission, dashboardOnly, trilhasOnly, registrarAny }) => {
+            if (dashboardOnly) {
+              if (!user?.hasPermission?.(permission ?? '') && !user?.isAdmin?.() && !user?.isMaster?.()) return null
+            } else if (trilhasOnly) {
+              if (!user?.hasPermission?.(permission ?? '') || user?.isAdmin?.() || user?.isMaster?.()) return null
+            } else if (registrarAny) {
+              const hasRegistrar = user?.hasPermission?.('registrar_treinamento_parceiro') ||
+                user?.hasPermission?.('registrar_treinamento_colaborador') ||
+                user?.isAdmin?.() || user?.isMaster?.()
+              if (!hasRegistrar) return null
+            } else if (permission && !user?.hasPermission?.(permission) && !user?.isAdmin?.() && !user?.isMaster?.()) return null
             const isActive = pathname === href
             return (
               <li key={href}>

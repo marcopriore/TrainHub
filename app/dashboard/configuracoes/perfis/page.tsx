@@ -39,6 +39,8 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 const PERMISSOES_EDITAVEIS: Permissao[] = [
+  'ver_dashboard_geral',
+  'ver_minhas_trilhas',
   'visualizar_colaboradores',
   'editar_colaboradores',
   'visualizar_setores',
@@ -46,7 +48,8 @@ const PERMISSOES_EDITAVEIS: Permissao[] = [
   'visualizar_empresas_parceiras',
   'editar_empresas_parceiras',
   'visualizar_historico',
-  'registrar_treinamento',
+  'registrar_treinamento_parceiro',
+  'registrar_treinamento_colaborador',
   'editar_treinamento',
   'excluir_treinamento',
   'importar_planilha',
