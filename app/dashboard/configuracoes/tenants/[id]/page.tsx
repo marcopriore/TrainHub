@@ -352,14 +352,33 @@ export default function TenantEditPage() {
     [usuarios]
   )
 
-  const usuariosPorPerfil = useMemo(() => {
+  const usuariosPorPerfilMap = useMemo(() => {
     const map = new Map<string, number>()
-    for (const u of usuarios) {
+    for (const u of usuarios.filter((x) => x.ativo === true)) {
       const nome = u.perfis?.nome ?? 'Sem perfil'
       map.set(nome, (map.get(nome) ?? 0) + 1)
     }
-    return Array.from(map.entries()).map(([nome, count]) => ({ nome, count }))
+    return map
   }, [usuarios])
+
+  const indicatorCards = useMemo(() => {
+    const cards: { label: string; value: number }[] = [
+      { label: 'Usuários ativos', value: usuariosAtivos },
+      {
+        label: perfis[0]?.nome ?? '—',
+        value: perfis[0] ? (usuariosPorPerfilMap.get(perfis[0].nome) ?? 0) : 0,
+      },
+      {
+        label: perfis[1]?.nome ?? '—',
+        value: perfis[1] ? (usuariosPorPerfilMap.get(perfis[1].nome) ?? 0) : 0,
+      },
+      {
+        label: perfis[2]?.nome ?? '—',
+        value: perfis[2] ? (usuariosPorPerfilMap.get(perfis[2].nome) ?? 0) : 0,
+      },
+    ]
+    return cards
+  }, [usuariosAtivos, perfis, usuariosPorPerfilMap])
 
   const perfilByName = useMemo(() => {
     const map = new Map<string, string>()
@@ -638,14 +657,10 @@ export default function TenantEditPage() {
           </div>
           <div className="flex-[4] min-w-0">
             <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-lg border border-border bg-muted/30 p-5 flex flex-col justify-center min-h-[100px]">
-                <p className="text-4xl font-bold text-[#00C9A7]">{usuariosAtivos}</p>
-                <p className="text-sm text-muted-foreground mt-2">Usuários ativos</p>
-              </div>
-              {usuariosPorPerfil.slice(0, 3).map(({ nome, count }) => (
-                <div key={nome} className="rounded-lg border border-border bg-muted/30 p-5 flex flex-col justify-center min-h-[100px]">
-                  <p className="text-4xl font-bold text-[#00C9A7]">{count}</p>
-                  <p className="text-sm text-muted-foreground mt-2 truncate" title={nome}>{nome}</p>
+              {indicatorCards.map((card, i) => (
+                <div key={i} className="rounded-lg border border-border bg-muted/30 p-5 flex flex-col justify-center min-h-[100px]">
+                  <p className="text-4xl font-bold text-[#00C9A7]">{card.value}</p>
+                  <p className="text-sm text-muted-foreground mt-2 truncate" title={card.label}>{card.label}</p>
                 </div>
               ))}
             </div>
