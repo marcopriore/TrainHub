@@ -35,7 +35,7 @@ interface PerfilRow {
   is_admin: boolean
 }
 
-const QUERY_TIMEOUT_MS = 3000
+const QUERY_TIMEOUT_MS = 8000
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -46,12 +46,32 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     loading: true,
     error: null,
   })
+  const [tentativas, setTentativas] = React.useState(0)
   const redirectingRef = React.useRef(false)
+  const tentativasRef = React.useRef(0)
 
   React.useEffect(() => {
+    const MAX_TENTATIVAS = 3
+    const RETRY_DELAY_MS = 2000
+
+    const scheduleRetry = (userId: string) => {
+      if (tentativasRef.current >= MAX_TENTATIVAS) return
+      if (DEBUG_USER_PROVIDER) console.log(`Tentativa ${tentativasRef.current} falhou. Reagendando em ${RETRY_DELAY_MS}ms...`)
+      setTimeout(() => {
+        fetchUser(userId)
+      }, RETRY_DELAY_MS)
+    }
+
+    const maybeRedirect = () => {
+      if (!isPublicPath(pathname ?? '') && !redirectingRef.current && tentativasRef.current >= 2) {
+        redirectingRef.current = true
+        if (DEBUG_USER_PROVIDER) console.log('Redirecionando para /sem-acesso (tentativas esgotadas)')
+        router.replace('/sem-acesso')
+      }
+    }
 
     const fetchUser = async (userId: string) => {
-      if (DEBUG_USER_PROVIDER) console.log('Buscando dados do usuário:', userId)
+      if (DEBUG_USER_PROVIDER) console.log('Buscando dados do usuário:', userId, 'tentativa:', tentativasRef.current + 1)
       try {
         const usuariosPromise = supabase
           .from('usuarios')
@@ -71,11 +91,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
         if (userError || !usuario) {
           if (DEBUG_USER_PROVIDER && !usuario) console.log('Usuário não encontrado na tabela usuarios')
-          setValue({ user: null, loading: false, error: userError?.message ?? null })
-          if (!isPublicPath(pathname ?? '') && !redirectingRef.current) {
-            redirectingRef.current = true
-            router.replace('/sem-acesso')
+          tentativasRef.current += 1
+          setTentativas(tentativasRef.current)
+          if (tentativasRef.current < MAX_TENTATIVAS) {
+            scheduleRetry(userId)
+            return
           }
+          setValue({ user: null, loading: false, error: userError?.message ?? null })
+          maybeRedirect()
           return
         }
 
@@ -126,15 +149,21 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         setValue({ user: userData, loading: false, error: null })
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Erro ao carregar usuário'
-        setValue({ user: null, loading: false, error: message })
-        if (!isPublicPath(pathname ?? '') && !redirectingRef.current) {
-          redirectingRef.current = true
-          router.replace('/sem-acesso')
+        if (DEBUG_USER_PROVIDER) console.log('fetchUser catch:', message)
+        tentativasRef.current += 1
+        setTentativas(tentativasRef.current)
+        if (tentativasRef.current < MAX_TENTATIVAS) {
+          scheduleRetry(userId)
+          return
         }
+        setValue({ user: null, loading: false, error: message })
+        maybeRedirect()
       }
     }
 
     const init = async () => {
+      tentativasRef.current = 0
+      setTentativas(0)
       const {
         data: { session },
         error: sessionError,
@@ -174,8 +203,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       redirectingRef.current = false
       if (event === 'SIGNED_OUT' || !session) {
         setValue({ user: null, loading: false, error: null })
+        tentativasRef.current = 0
+        setTentativas(0)
         return
       }
+      tentativasRef.current = 0
+      setTentativas(0)
       await fetchUser(session.user.id)
     })
 

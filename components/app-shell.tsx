@@ -43,6 +43,13 @@ const navItems = [
     icon: Users,
     subItem: true,
   },
+  {
+    href: '/dashboard/configuracoes/tenants',
+    label: 'Tenants',
+    icon: Building2,
+    subItem: true,
+    masterOnly: true,
+  },
 ]
 
 interface SidebarProps {
@@ -85,7 +92,8 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto" aria-label="Menu principal">
         <ul className="flex flex-col gap-1">
-          {navItems.map(({ href, label, icon: Icon, subItem }) => {
+          {navItems.map(({ href, label, icon: Icon, subItem, masterOnly }) => {
+            if (masterOnly && !user?.isMaster()) return null
             const isActive = pathname === href
             return (
               <li key={href}>
