@@ -27,16 +27,16 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 const mainNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: null as string | null },
   { href: '/dashboard/treinamentos/novo', label: 'Registrar Treinamento', icon: PlusCircle, permission: 'registrar_treinamento' },
-  { href: '/dashboard/historico', label: 'Histórico de Treinamentos', icon: List, permission: 'visualizar_historico' },
-  { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart2, permission: 'visualizar_relatorios' },
+  { href: '/dashboard/historico', label: 'Histórico de Treinamentos', icon: List, permission: null },
+  { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart2, permission: null },
 ]
 
 const configNavItems = [
-  { href: '/dashboard/configuracoes/setores', label: 'Setores', icon: Building2, permission: 'visualizar_setores' as string | null },
-  { href: '/dashboard/configuracoes/empresas-parceiras', label: 'Empresas Parceiras', icon: Briefcase, permission: 'visualizar_empresas_parceiras' },
-  { href: '/dashboard/configuracoes/colaboradores', label: 'Colaboradores', icon: Users, permission: 'visualizar_colaboradores' },
-  { href: '/dashboard/configuracoes/perfis', label: 'Perfil de Acesso', icon: Shield, masterOnly: true, permission: null },
-  { href: '/dashboard/configuracoes/tenants', label: 'Tenants', icon: Building2, masterOnly: true, permission: null },
+  { href: '/dashboard/configuracoes/setores', label: 'Setores', icon: Building2, permission: 'gerenciar_setores', masterOnly: false },
+  { href: '/dashboard/configuracoes/empresas-parceiras', label: 'Empresas Parceiras', icon: Briefcase, permission: 'gerenciar_empresas_parceiras', masterOnly: false },
+  { href: '/dashboard/configuracoes/colaboradores', label: 'Colaboradores', icon: Users, permission: 'gerenciar_colaboradores', masterOnly: false },
+  { href: '/dashboard/configuracoes/perfis', label: 'Perfil de Acesso', icon: Shield, permission: null, masterOnly: true },
+  { href: '/dashboard/configuracoes/tenants', label: 'Tenants', icon: Building2, permission: null, masterOnly: true },
 ]
 
 interface SidebarProps {
@@ -82,7 +82,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       <nav className="flex-1 px-3 py-4 overflow-y-auto" aria-label="Menu principal">
         <ul className="flex flex-col gap-1">
           {mainNavItems.map(({ href, label, icon: Icon, permission }) => {
-            if (permission && !user?.hasPermission?.(permission)) return null
+            if (permission && !user?.hasPermission?.(permission) && !user?.isAdmin?.() && !user?.isMaster?.()) return null
             const isActive = pathname === href
             return (
               <li key={href}>
@@ -131,7 +131,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
                 <ul className="flex flex-col gap-0.5 mt-1 pl-1">
                   {configNavItems.map(({ href, label, icon: Icon, masterOnly, permission }) => {
                     if (masterOnly && !user?.isMaster()) return null
-                    if (permission && !user?.hasPermission?.(permission)) return null
+                    if (permission && !user?.hasPermission?.(permission) && !user?.isAdmin?.() && !user?.isMaster?.()) return null
                     const isActive = pathname === href
                     return (
                       <li key={href}>

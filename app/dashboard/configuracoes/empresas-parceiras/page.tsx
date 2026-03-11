@@ -45,8 +45,8 @@ interface EmpresaParceira {
 export default function EmpresasParceirasPage() {
   const router = useRouter()
   const { user, getActiveTenantId } = useUser()
-  const canView = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('visualizar_empresas_parceiras')
-  const canEdit = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('editar_empresas_parceiras')
+  const canManage = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('gerenciar_empresas_parceiras')
+  const canEdit = canManage
   const [empresas, setEmpresas] = useState<EmpresaParceira[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -59,8 +59,8 @@ export default function EmpresasParceirasPage() {
   const supabase = createClient()
 
   useEffect(() => {
-    if (user && !canView) router.replace('/dashboard')
-  }, [user, canView, router])
+    if (user && !canManage) router.replace('/dashboard')
+  }, [user, canManage, router])
 
   const fetchEmpresas = async () => {
     const tenantId = getActiveTenantId()

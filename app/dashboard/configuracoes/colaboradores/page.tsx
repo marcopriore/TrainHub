@@ -61,8 +61,8 @@ interface Colaborador {
 export default function ColaboradoresPage() {
   const router = useRouter()
   const { user, getActiveTenantId } = useUser()
-  const canView = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('visualizar_colaboradores')
-  const canEdit = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('editar_colaboradores')
+  const canManage = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('gerenciar_colaboradores')
+  const canEdit = canManage
   const canImport = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('importar_planilha')
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([])
   const [setores, setSetores] = useState<Setor[]>([])
@@ -79,10 +79,10 @@ export default function ColaboradoresPage() {
   const supabase = createClient()
 
   useEffect(() => {
-    if (user && !canView) {
+    if (user && !canManage) {
       router.replace('/dashboard')
     }
-  }, [user, canView, router])
+  }, [user, canManage, router])
 
   const fetchColaboradores = async () => {
     const tenantId = getActiveTenantId()

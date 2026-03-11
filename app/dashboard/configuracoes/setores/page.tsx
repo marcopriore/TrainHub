@@ -45,8 +45,8 @@ interface Setor {
 export default function SetoresPage() {
   const router = useRouter()
   const { user, getActiveTenantId } = useUser()
-  const canView = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('visualizar_setores')
-  const canEdit = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('editar_setores')
+  const canManage = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('gerenciar_setores')
+  const canEdit = canManage
   const [setores, setSetores] = useState<Setor[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -59,8 +59,8 @@ export default function SetoresPage() {
   const supabase = createClient()
 
   useEffect(() => {
-    if (user && !canView) router.replace('/dashboard')
-  }, [user, canView, router])
+    if (user && !canManage) router.replace('/dashboard')
+  }, [user, canManage, router])
 
   const fetchSetores = async () => {
     const tenantId = getActiveTenantId()
