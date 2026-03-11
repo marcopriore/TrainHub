@@ -299,41 +299,21 @@ export default function TenantsPage() {
     if (!sheetOpen || sheetOpen === 'novo') return
     try {
       const senha = generateTempPassword()
-      const supabase = createClient()
 
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: data.email,
-        password: senha,
-        options: {
-          data: { full_name: data.nome },
-          emailRedirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/dashboard`,
-        },
+      const response = await fetch('/api/admin/criar-usuario', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: data.nome,
+          email: data.email,
+          senha,
+          tenant_id: sheetOpen,
+          perfil_id: data.perfil_id,
+        }),
       })
 
-      if (authError) {
-        toast.error(authError.message)
-        return
-      }
-      const userId = authData.user?.id
-      if (!userId) {
-        toast.error('Erro ao criar usuário')
-        return
-      }
-
-      const { error: usuarioError } = await supabase.from('usuarios').insert({
-        id: userId,
-        tenant_id: sheetOpen,
-        perfil_id: data.perfil_id,
-        nome: data.nome,
-        email: data.email,
-        is_master: false,
-        ativo: true,
-      })
-
-      if (usuarioError) {
-        toast.error('Usuário criado no Auth, mas erro ao vincular ao tenant.')
-        return
-      }
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error ?? 'Erro ao criar usuário')
 
       setTempPassword(senha)
       toast.success('Usuário criado. Anote a senha temporária.')

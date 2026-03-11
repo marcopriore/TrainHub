@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
+import { useUser } from '@/lib/use-user'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -41,6 +42,7 @@ interface Setor {
 }
 
 export default function SetoresPage() {
+  const { user, getActiveTenantId } = useUser()
   const [setores, setSetores] = useState<Setor[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -53,11 +55,14 @@ export default function SetoresPage() {
   const supabase = createClient()
 
   const fetchSetores = async () => {
+    const tenantId = getActiveTenantId()
+    if (!tenantId) return
     setLoading(true)
     try {
       const { data, error } = await supabase
         .from('setores')
         .select('*')
+        .eq('tenant_id', tenantId)
         .order('nome', { ascending: true })
 
       if (error) throw error
@@ -70,9 +75,10 @@ export default function SetoresPage() {
     }
   }
 
+  const activeTenantId = getActiveTenantId()
   useEffect(() => {
-    fetchSetores()
-  }, [])
+    if (activeTenantId) fetchSetores()
+  }, [activeTenantId])
 
   const openNewDialog = () => {
     setEditingSetor(null)
@@ -99,6 +105,12 @@ export default function SetoresPage() {
       return
     }
 
+    const tenantId = getActiveTenantId()
+    if (!editingSetor && !tenantId) {
+      toast.error('Tenant não identificado.')
+      return
+    }
+
     setSubmitting(true)
     try {
       if (editingSetor) {
@@ -110,7 +122,9 @@ export default function SetoresPage() {
         if (error) throw error
         toast.success('Setor atualizado com sucesso.')
       } else {
-        const { error } = await supabase.from('setores').insert({ nome: nomeTrimmed })
+        const { error } = await supabase
+          .from('setores')
+          .insert({ nome: nomeTrimmed, tenant_id: tenantId as string })
 
         if (error) throw error
         toast.success('Setor cadastrado com sucesso.')

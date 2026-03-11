@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, FileSpreadsheet } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
+import { useUser } from '@/lib/use-user'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -57,6 +58,7 @@ interface Colaborador {
 }
 
 export default function ColaboradoresPage() {
+  const { user, getActiveTenantId } = useUser()
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([])
   const [setores, setSetores] = useState<Setor[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,11 +74,14 @@ export default function ColaboradoresPage() {
   const supabase = createClient()
 
   const fetchColaboradores = async () => {
+    const tenantId = getActiveTenantId()
+    if (!tenantId) return
     setLoading(true)
     try {
       const { data, error } = await supabase
         .from('colaboradores')
         .select('*, setores(nome)')
+        .eq('tenant_id', tenantId)
         .order('nome', { ascending: true })
 
       if (error) throw error
@@ -90,10 +95,13 @@ export default function ColaboradoresPage() {
   }
 
   const fetchSetores = async () => {
+    const tenantId = getActiveTenantId()
+    if (!tenantId) return
     try {
       const { data, error } = await supabase
         .from('setores')
         .select('id, nome')
+        .eq('tenant_id', tenantId)
         .order('nome', { ascending: true })
 
       if (error) throw error
@@ -104,10 +112,13 @@ export default function ColaboradoresPage() {
     }
   }
 
+  const activeTenantId = getActiveTenantId()
   useEffect(() => {
-    fetchColaboradores()
-    fetchSetores()
-  }, [])
+    if (activeTenantId) {
+      fetchColaboradores()
+      fetchSetores()
+    }
+  }, [activeTenantId])
 
   const openNewDialog = () => {
     setEditingColaborador(null)
@@ -152,9 +163,15 @@ export default function ColaboradoresPage() {
         if (error) throw error
         toast.success('Colaborador atualizado com sucesso.')
       } else {
+        const tenantId = getActiveTenantId()
+        if (!tenantId) {
+          toast.error('Tenant não identificado.')
+          setSubmitting(false)
+          return
+        }
         const { error } = await supabase
           .from('colaboradores')
-          .insert({ nome: nomeTrimmed, setor_id: setorId })
+          .insert({ nome: nomeTrimmed, setor_id: setorId, tenant_id: tenantId })
 
         if (error) throw error
         toast.success('Colaborador cadastrado com sucesso.')
@@ -400,9 +417,12 @@ export default function ColaboradoresPage() {
           return { valid: true, errors: [], data: validData }
         }}
         onConfirmImport={async (data) => {
+          const tenantId = getActiveTenantId()
+          if (!tenantId) throw new Error('Tenant não identificado')
           const toInsert = data.map((row) => ({
             nome: row.nome,
             setor_id: row.setor_id,
+            tenant_id: tenantId,
           }))
           const { error } = await supabase.from('colaboradores').insert(toInsert)
           if (error) throw error

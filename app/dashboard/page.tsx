@@ -1,19 +1,35 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
+import { useUser } from '@/lib/use-user'
 import { KpiCards, type KpiData } from '@/components/dashboard/kpi-cards'
-import {
-  TrainingBarChart,
-  TrainingDonutChart,
-  type MonthlyBarData,
-  type DonutDataItem,
-} from '@/components/dashboard/charts'
 import {
   RecentActivityTable,
   type RecentActivityItem,
 } from '@/components/dashboard/recent-activity'
+import type { MonthlyBarData, DonutDataItem } from '@/components/dashboard/charts'
+
+const TrainingBarChart = dynamic(
+  () => import('@/components/dashboard/charts').then((m) => ({ default: m.TrainingBarChart })),
+  { ssr: false, loading: () => <ChartSkeleton title="Horas de Treinamento por Mês" /> }
+)
+
+const TrainingDonutChart = dynamic(
+  () => import('@/components/dashboard/charts').then((m) => ({ default: m.TrainingDonutChart })),
+  { ssr: false, loading: () => <ChartSkeleton title="Treinamentos por Tipo" /> }
+)
+
+function ChartSkeleton({ title }: { title: string }) {
+  return (
+    <div className="bg-card rounded-xl border border-border p-5 shadow-sm">
+      <h3 className="font-serif text-base font-semibold text-foreground mb-4">{title}</h3>
+      <div className="h-[260px] w-full rounded-lg bg-muted animate-pulse" />
+    </div>
+  )
+}
 
 interface TreinamentoRow {
   id: string
@@ -120,6 +136,8 @@ function processarDados(treinamentos: TreinamentoRow[]) {
 }
 
 export default function DashboardPage() {
+  const { getActiveTenantId } = useUser()
+  const activeTenantId = getActiveTenantId()
   const [loading, setLoading] = useState(true)
   const [kpiData, setKpiData] = useState<KpiData | null>(null)
   const [barData, setBarData] = useState<MonthlyBarData[]>([])
@@ -127,13 +145,24 @@ export default function DashboardPage() {
   const [recentes, setRecentes] = useState<RecentActivityItem[]>([])
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
+    if (!activeTenantId) {
+      setKpiData(null)
+      setBarData([])
+      setDonutData([])
+      setRecentes([])
+      setLoading(false)
+      return
+    }
+
+    const supabase = createClient()
+
+    const fetchData = async (silent = false) => {
+      if (!silent) setLoading(true)
       try {
-        const supabase = createClient()
         const { data, error } = await supabase
           .from('treinamentos')
           .select('id, tipo, nome, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, criado_em, empresas_parceiras(nome)')
+          .eq('tenant_id', activeTenantId)
           .order('criado_em', { ascending: false })
 
         if (error) throw error
@@ -153,8 +182,45 @@ export default function DashboardPage() {
         setLoading(false)
       }
     }
-    fetchData()
-  }, [])
+
+    let pollId: ReturnType<typeof setInterval> | null = null
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
+    const setupRealtime = () => {
+      channel = supabase
+        .channel('treinamentos-dashboard')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'treinamentos',
+            filter: `tenant_id=eq.${activeTenantId}`,
+          },
+          () => fetchData(true)
+        )
+        .subscribe()
+
+      pollId = setInterval(() => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+          fetchData(true)
+        }
+      }, 15_000)
+    }
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') fetchData(true)
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    fetchData().then(setupRealtime)
+
+    return () => {
+      if (channel) supabase.removeChannel(channel)
+      if (pollId) clearInterval(pollId)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [activeTenantId])
 
   return (
     <div className="flex flex-col gap-6">

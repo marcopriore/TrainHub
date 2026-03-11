@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+import { useUser } from '@/lib/use-user'
 import {
   BarChart,
   Bar,
@@ -90,6 +91,8 @@ function getMesesNoPeriodo(dataInicio: string, dataFim: string) {
 }
 
 export default function RelatoriosPage() {
+  const { getActiveTenantId } = useUser()
+  const activeTenantId = getActiveTenantId()
   const { inicio: defaultInicio, fim: defaultFim } = getUltimoAno()
   const [dataInicio, setDataInicio] = useState(defaultInicio)
   const [dataFim, setDataFim] = useState(defaultFim)
@@ -101,12 +104,19 @@ export default function RelatoriosPage() {
   const [tcData, setTcData] = useState<TreinamentoColaboradorRow[]>([])
   const supabase = createClient()
 
-  const fetchData = async () => {
-    setLoading(true)
+  const fetchData = async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
+      if (!activeTenantId) {
+        setTreinamentos([])
+        setTcData([])
+        setLoading(false)
+        return
+      }
       let query = supabase
         .from('treinamentos')
         .select('id, tipo, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, empresa_parceira_id, empresas_parceiras(nome)')
+        .eq('tenant_id', activeTenantId)
         .gte('data_treinamento', appliedFilters.dataInicio)
         .lte('data_treinamento', appliedFilters.dataFim)
 
@@ -143,8 +153,47 @@ export default function RelatoriosPage() {
   }
 
   useEffect(() => {
+    if (!activeTenantId) {
+      setTreinamentos([])
+      setTcData([])
+      setLoading(false)
+      return
+    }
+
     fetchData()
-  }, [appliedFilters])
+
+    const channel = supabase
+      .channel('treinamentos-relatorios')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'treinamentos',
+          filter: `tenant_id=eq.${activeTenantId}`,
+        },
+        () => fetchData(true)
+      )
+      .subscribe()
+
+    const pollMs = 15_000
+    const pollId = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchData(true)
+      }
+    }, pollMs)
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') fetchData(true)
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    return () => {
+      supabase.removeChannel(channel)
+      clearInterval(pollId)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [appliedFilters, activeTenantId])
 
   const handleAplicarFiltros = () => {
     setAppliedFilters({ dataInicio, dataFim, filtroTipo })

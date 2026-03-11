@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
+import { useUser } from '@/lib/use-user'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -41,6 +42,7 @@ interface EmpresaParceira {
 }
 
 export default function EmpresasParceirasPage() {
+  const { user, getActiveTenantId } = useUser()
   const [empresas, setEmpresas] = useState<EmpresaParceira[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -53,11 +55,14 @@ export default function EmpresasParceirasPage() {
   const supabase = createClient()
 
   const fetchEmpresas = async () => {
+    const tenantId = getActiveTenantId()
+    if (!tenantId) return
     setLoading(true)
     try {
       const { data, error } = await supabase
         .from('empresas_parceiras')
         .select('*')
+        .eq('tenant_id', tenantId)
         .order('nome', { ascending: true })
 
       if (error) throw error
@@ -70,9 +75,10 @@ export default function EmpresasParceirasPage() {
     }
   }
 
+  const activeTenantId = getActiveTenantId()
   useEffect(() => {
-    fetchEmpresas()
-  }, [])
+    if (activeTenantId) fetchEmpresas()
+  }, [activeTenantId])
 
   const openNewDialog = () => {
     setEditingEmpresa(null)
@@ -110,9 +116,15 @@ export default function EmpresasParceirasPage() {
         if (error) throw error
         toast.success('Empresa parceira atualizada com sucesso.')
       } else {
+        const tenantId = getActiveTenantId()
+        if (!tenantId) {
+          toast.error('Tenant não identificado.')
+          setSubmitting(false)
+          return
+        }
         const { error } = await supabase
           .from('empresas_parceiras')
-          .insert({ nome: nomeTrimmed })
+          .insert({ nome: nomeTrimmed, tenant_id: tenantId })
 
         if (error) throw error
         toast.success('Empresa parceira cadastrada com sucesso.')

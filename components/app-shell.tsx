@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useUser } from '@/lib/use-user'
 import {
   GraduationCap,
@@ -17,39 +17,26 @@ import {
   Building2,
   Briefcase,
   Users,
+  ChevronDown,
+  Shield,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { TenantSelector } from '@/components/tenant-selector'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
-const navItems = [
+const mainNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  {
-    href: '/dashboard/treinamentos/novo',
-    label: 'Registrar Treinamento',
-    icon: PlusCircle,
-  },
+  { href: '/dashboard/treinamentos/novo', label: 'Registrar Treinamento', icon: PlusCircle },
   { href: '/dashboard/historico', label: 'Histórico de Treinamentos', icon: List },
   { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart2 },
-  { href: '/dashboard/configuracoes', label: 'Configurações', icon: Settings },
-  { href: '/dashboard/configuracoes/setores', label: 'Setores', icon: Building2, subItem: true },
-  {
-    href: '/dashboard/configuracoes/empresas-parceiras',
-    label: 'Empresas Parceiras',
-    icon: Briefcase,
-    subItem: true,
-  },
-  {
-    href: '/dashboard/configuracoes/colaboradores',
-    label: 'Colaboradores',
-    icon: Users,
-    subItem: true,
-  },
-  {
-    href: '/dashboard/configuracoes/tenants',
-    label: 'Tenants',
-    icon: Building2,
-    subItem: true,
-    masterOnly: true,
-  },
+]
+
+const configNavItems = [
+  { href: '/dashboard/configuracoes/setores', label: 'Setores', icon: Building2 },
+  { href: '/dashboard/configuracoes/empresas-parceiras', label: 'Empresas Parceiras', icon: Briefcase },
+  { href: '/dashboard/configuracoes/colaboradores', label: 'Colaboradores', icon: Users },
+  { href: '/dashboard/configuracoes/perfis', label: 'Perfil de Acesso', icon: Shield, masterOnly: true },
+  { href: '/dashboard/configuracoes/tenants', label: 'Tenants', icon: Building2, masterOnly: true },
 ]
 
 interface SidebarProps {
@@ -89,11 +76,12 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
         )}
       </div>
 
+      <TenantSelector />
+
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto" aria-label="Menu principal">
         <ul className="flex flex-col gap-1">
-          {navItems.map(({ href, label, icon: Icon, subItem, masterOnly }) => {
-            if (masterOnly && !user?.isMaster()) return null
+          {mainNavItems.map(({ href, label, icon: Icon }) => {
             const isActive = pathname === href
             return (
               <li key={href}>
@@ -102,7 +90,6 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
                   onClick={onClose}
                   className={cn(
                     'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group',
-                    subItem && 'pl-8',
                     isActive
                       ? 'bg-sidebar-accent text-white'
                       : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
@@ -123,6 +110,58 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
               </li>
             )
           })}
+
+          <li className="pt-2 mt-2 border-t border-sidebar-border/50">
+            <Collapsible
+              defaultOpen={pathname.startsWith('/dashboard/configuracoes')}
+              className="group/collapsible"
+            >
+              <CollapsibleTrigger
+                className={cn(
+                  'flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
+                  'text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
+                )}
+              >
+                <Settings className="w-4.5 h-4.5 flex-shrink-0 text-sidebar-foreground/50" />
+                <span className="flex-1 text-left">Configurações</span>
+                <ChevronDown className="w-4 h-4 transition-transform group-data-[state=closed]/collapsible:-rotate-90" />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <ul className="flex flex-col gap-0.5 mt-1 pl-1">
+                  {configNavItems.map(({ href, label, icon: Icon, masterOnly }) => {
+                    if (masterOnly && !user?.isMaster()) return null
+                    const isActive = pathname === href
+                    return (
+                      <li key={href}>
+                        <Link
+                          href={href}
+                          onClick={onClose}
+                          className={cn(
+                            'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 group',
+                            isActive
+                              ? 'bg-sidebar-accent text-white'
+                              : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
+                          )}
+                          aria-current={isActive ? 'page' : undefined}
+                        >
+                          <Icon
+                            className={cn(
+                              'w-4 h-4 flex-shrink-0',
+                              isActive ? 'text-primary' : 'text-sidebar-foreground/50'
+                            )}
+                          />
+                          <span>{label}</span>
+                          {isActive && (
+                            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />
+                          )}
+                        </Link>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </CollapsibleContent>
+            </Collapsible>
+          </li>
         </ul>
       </nav>
 

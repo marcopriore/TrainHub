@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { PlusCircle, Trash2, Building2, Users, FileSpreadsheet } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
+import { useUser } from '@/lib/use-user'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -93,6 +94,8 @@ function FormField({
 // ---------- Main Page ----------
 export default function NovoTreinamentoPage() {
   const router = useRouter()
+  const { getActiveTenantId } = useUser()
+  const activeTenantId = getActiveTenantId()
   const [empresas, setEmpresas] = useState<EmpresaParceira[]>([])
   const [colaboradores, setColaboradores] = useState<ColaboradorWithSetor[]>([])
   const [treinamentosExistentes, setTreinamentosExistentes] = useState<
@@ -102,16 +105,23 @@ export default function NovoTreinamentoPage() {
   const supabase = createClient()
 
   useEffect(() => {
+    if (!activeTenantId) {
+      setEmpresas([])
+      setColaboradores([])
+      return
+    }
     const loadData = async () => {
       try {
         const [empRes, colRes] = await Promise.all([
           supabase
             .from('empresas_parceiras')
             .select('id, nome')
+            .eq('tenant_id', activeTenantId)
             .order('nome', { ascending: true }),
           supabase
             .from('colaboradores')
             .select('id, nome, setor_id, setores(nome)')
+            .eq('tenant_id', activeTenantId)
             .order('nome', { ascending: true }),
         ])
         if (empRes.error) throw empRes.error
@@ -124,13 +134,15 @@ export default function NovoTreinamentoPage() {
       }
     }
     loadData()
-  }, [])
+  }, [activeTenantId])
 
   const fetchTreinamentosExistentes = async () => {
+    if (!activeTenantId) return
     try {
       const { data, error } = await supabase
         .from('treinamentos')
         .select('nome, data_treinamento')
+        .eq('tenant_id', activeTenantId)
       if (error) throw error
       setTreinamentosExistentes((data as { nome: string; data_treinamento: string }[]) ?? [])
     } catch (err) {
@@ -187,6 +199,7 @@ export default function NovoTreinamentoPage() {
         <TabsContent value="parceiro" className="mt-6">
           <ParceiroForm
             empresas={empresas}
+            tenantId={activeTenantId}
             onSuccess={() => {
               toast.success('Treinamento salvo com sucesso.')
               router.push('/dashboard/treinamentos')
@@ -198,6 +211,7 @@ export default function NovoTreinamentoPage() {
           <ColaboradorForm
             empresas={empresas}
             colaboradores={colaboradores}
+            tenantId={activeTenantId}
             formatColaboradorLabel={formatColaboradorLabel}
             onSuccess={() => {
               toast.success('Treinamento salvo com sucesso.')
@@ -214,6 +228,7 @@ export default function NovoTreinamentoPage() {
         colaboradores={colaboradores.map((c) => ({ id: c.id, nome: c.nome }))}
         treinamentosExistentes={treinamentosExistentes}
         onImportParceiro={async (data) => {
+          if (!activeTenantId) throw new Error('Tenant não identificado')
           const supabaseClient = createClient()
           for (const row of data) {
             const { error } = await supabaseClient
@@ -229,11 +244,13 @@ export default function NovoTreinamentoPage() {
                 data_treinamento: row.data_treinamento,
                 indice_satisfacao: row.indice_satisfacao,
                 indice_aprovacao: row.indice_aprovacao,
+                tenant_id: activeTenantId,
               })
             if (error) throw error
           }
         }}
         onImportColaborador={async (data) => {
+          if (!activeTenantId) throw new Error('Tenant não identificado')
           const supabaseClient = createClient()
           for (const row of data) {
             const { data: inserted, error: err1 } = await supabaseClient
@@ -248,6 +265,7 @@ export default function NovoTreinamentoPage() {
                 data_treinamento: row.data_treinamento,
                 indice_satisfacao: row.indice_satisfacao,
                 indice_aprovacao: row.indice_aprovacao,
+                tenant_id: activeTenantId,
               })
               .select('id')
               .single()
@@ -258,6 +276,7 @@ export default function NovoTreinamentoPage() {
               const rows = colabIds.map((colaborador_id: string) => ({
                 treinamento_id: treinamentoId,
                 colaborador_id,
+                tenant_id: activeTenantId,
               }))
               const { error: err2 } = await supabaseClient
                 .from('treinamento_colaboradores')
@@ -278,9 +297,11 @@ export default function NovoTreinamentoPage() {
 // ---------- Parceiro Form ----------
 function ParceiroForm({
   empresas,
+  tenantId,
   onSuccess,
 }: {
   empresas: EmpresaParceira[]
+  tenantId: string | null
   onSuccess: () => void
 }) {
   const {
@@ -294,6 +315,10 @@ function ParceiroForm({
   })
 
   const onSubmit = async (data: ParceiroForm) => {
+    if (!tenantId) {
+      toast.error('Tenant não identificado. Selecione um tenant.')
+      return
+    }
     const supabase = createClient()
     try {
       const { data: row, error } = await supabase
@@ -309,6 +334,7 @@ function ParceiroForm({
           data_treinamento: data.dataTreinamento,
           indice_satisfacao: data.indiceSatisfacao,
           indice_aprovacao: data.indiceAprovacao,
+          tenant_id: tenantId,
         })
         .select('id')
         .single()
@@ -447,11 +473,13 @@ function ParceiroForm({
 function ColaboradorForm({
   empresas,
   colaboradores,
+  tenantId,
   formatColaboradorLabel,
   onSuccess,
 }: {
   empresas: EmpresaParceira[]
   colaboradores: ColaboradorWithSetor[]
+  tenantId: string | null
   formatColaboradorLabel: (c: ColaboradorWithSetor) => string
   onSuccess: () => void
 }) {
@@ -469,6 +497,10 @@ function ColaboradorForm({
   const { fields, append, remove } = useFieldArray({ control, name: 'colaboradores' })
 
   const onSubmit = async (data: ColaboradorForm) => {
+    if (!tenantId) {
+      toast.error('Tenant não identificado. Selecione um tenant.')
+      return
+    }
     const supabase = createClient()
     try {
       const { data: treinamento, error: err1 } = await supabase
@@ -480,9 +512,11 @@ function ColaboradorForm({
           objetivo: data.objetivo,
           carga_horaria: data.cargaHoraria,
           empresa_parceira_id: data.empresaParceiraId,
+          quantidade_pessoas: null,
           data_treinamento: data.dataTreinamento,
           indice_satisfacao: data.indiceSatisfacao,
           indice_aprovacao: data.indiceAprovacao,
+          tenant_id: tenantId,
         })
         .select('id')
         .single()
@@ -490,20 +524,33 @@ function ColaboradorForm({
       if (err1) throw err1
       if (!treinamento?.id) throw new Error('Falha ao criar treinamento')
 
-      const inserts = data.colaboradores.map((c) => ({
+      const colaboradorIds = data.colaboradores
+        .map((c) => c.colaboradorId?.trim())
+        .filter((id): id is string => !!id)
+      const inserts = colaboradorIds.map((colaborador_id) => ({
         treinamento_id: treinamento.id,
-        colaborador_id: c.colaboradorId,
+        colaborador_id,
+        tenant_id: tenantId,
       }))
 
-      const { error: err2 } = await supabase
-        .from('treinamento_colaboradores')
-        .insert(inserts)
+      if (inserts.length > 0) {
+        const { error: err2 } = await supabase
+          .from('treinamento_colaboradores')
+          .insert(inserts)
 
-      if (err2) throw err2
+        if (err2) throw err2
+      }
       onSuccess()
     } catch (error) {
-      console.error('Erro ao salvar treinamento:', error)
-      toast.error('Não foi possível salvar o treinamento. Tente novamente.')
+      const err = error as { message?: string; details?: string; hint?: string } | null
+      const msg =
+        err && typeof err === 'object'
+          ? (err.message || err.details || err.hint || null)
+          : null
+      const displayMsg =
+        (typeof msg === 'string' && msg.trim()) ? msg.trim() : 'Não foi possível salvar o treinamento. Tente novamente.'
+      console.error('Erro ao salvar treinamento:', { message: err?.message, details: err?.details, hint: err?.hint, raw: error })
+      toast.error(displayMsg)
     }
   }
 

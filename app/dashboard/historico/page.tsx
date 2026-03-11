@@ -17,6 +17,7 @@ import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
+import { useUser } from '@/lib/use-user'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -70,6 +71,7 @@ interface Treinamento {
   indice_satisfacao: number | null
   indice_aprovacao: number | null
   criado_em: string
+  tenant_id: string | null
   empresas_parceiras: { nome: string } | null
 }
 
@@ -318,9 +320,15 @@ function EditTreinamentoForm({
       if (delErr) throw delErr
 
       if (values.tipo === 'colaborador' && colaboradoresIds.length > 0) {
+        const tenantId = treinamento.tenant_id
+        if (!tenantId) {
+          toast.error('Tenant não identificado neste treinamento.')
+          return
+        }
         const rows = colaboradoresIds.map((colaborador_id) => ({
           treinamento_id: treinamento.id,
           colaborador_id,
+          tenant_id: tenantId,
         }))
         const { error: insErr } = await supabase
           .from('treinamento_colaboradores')
@@ -508,6 +516,8 @@ function EditTreinamentoForm({
 }
 
 export default function HistoricoPage() {
+  const { getActiveTenantId } = useUser()
+  const activeTenantId = getActiveTenantId()
   const [treinamentos, setTreinamentos] = useState<Treinamento[]>([])
   const [empresas, setEmpresas] = useState<EmpresaParceira[]>([])
   const [loading, setLoading] = useState(true)
@@ -529,12 +539,18 @@ export default function HistoricoPage() {
 
   const supabase = createClient()
 
-  const fetchTreinamentos = async () => {
-    setLoading(true)
+  const fetchTreinamentos = async (silent = false) => {
+    if (!activeTenantId) {
+      setTreinamentos([])
+      setLoading(false)
+      return
+    }
+    if (!silent) setLoading(true)
     try {
       const { data, error } = await supabase
         .from('treinamentos')
         .select('*, empresas_parceiras(nome)')
+        .eq('tenant_id', activeTenantId)
         .order('data_treinamento', { ascending: false })
 
       if (error) throw error
@@ -548,10 +564,15 @@ export default function HistoricoPage() {
   }
 
   const fetchEmpresas = async () => {
+    if (!activeTenantId) {
+      setEmpresas([])
+      return
+    }
     try {
       const { data, error } = await supabase
         .from('empresas_parceiras')
         .select('id, nome')
+        .eq('tenant_id', activeTenantId)
         .order('nome', { ascending: true })
 
       if (error) throw error
@@ -562,9 +583,43 @@ export default function HistoricoPage() {
   }
 
   useEffect(() => {
+    if (!activeTenantId) return
+
     fetchTreinamentos()
     fetchEmpresas()
-  }, [])
+
+    const channel = supabase
+      .channel('treinamentos-historico')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'treinamentos',
+          filter: `tenant_id=eq.${activeTenantId}`,
+        },
+        () => fetchTreinamentos(true)
+      )
+      .subscribe()
+
+    const pollMs = 15_000
+    const pollId = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchTreinamentos(true)
+      }
+    }, pollMs)
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') fetchTreinamentos(true)
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    return () => {
+      supabase.removeChannel(channel)
+      clearInterval(pollId)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [activeTenantId])
 
   const filtered = treinamentos.filter((t) => {
     const matchTipo = filtroTipo === 'todos' || t.tipo === filtroTipo
@@ -614,10 +669,12 @@ export default function HistoricoPage() {
   }
 
   const handleOpenEdit = async (t: Treinamento) => {
+    if (!activeTenantId) return
     try {
       const { data: colData, error: colErr } = await supabase
         .from('colaboradores')
         .select('id, nome, setor_id, setores(nome)')
+        .eq('tenant_id', activeTenantId)
         .order('nome', { ascending: true })
       if (colErr) throw colErr
       setColaboradoresList((colData as ColaboradorWithSetorEdit[]) ?? [])

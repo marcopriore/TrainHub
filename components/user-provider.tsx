@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { UserContext, createUserWithHelpers, type UserContextValue } from '@/lib/user-context'
+import { UserContext, createUserWithHelpers, getActiveTenantId, type UserContextValue } from '@/lib/user-context'
 
 const DEBUG_USER_PROVIDER = false
 
@@ -36,16 +36,18 @@ interface PerfilRow {
 }
 
 const QUERY_TIMEOUT_MS = 8000
+const STORAGE_KEY_SELECTED_TENANT = 'trainhub_selected_tenant_id'
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = React.useMemo(() => createClient(), [])
-  const [value, setValue] = React.useState<UserContextValue>({
+  const [value, setValue] = React.useState<Omit<UserContextValue, 'selectedTenantId' | 'selectedTenant' | 'setSelectedTenant' | 'getActiveTenantId'>>({
     user: null,
     loading: true,
     error: null,
   })
+  const [selectedTenant, setSelectedTenantState] = React.useState<{ id: string; nome: string; slug: string } | null>(null)
   const [tentativas, setTentativas] = React.useState(0)
   const redirectingRef = React.useRef(false)
   const tentativasRef = React.useRef(0)
@@ -147,6 +149,22 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           permissoes: listaPermissoes,
         })
         setValue({ user: userData, loading: false, error: null })
+        if (row.is_master) {
+          const stored = typeof window !== 'undefined' ? sessionStorage.getItem(STORAGE_KEY_SELECTED_TENANT) : null
+          const tenantObj = tenant ? { id: tenant.id, nome: tenant.nome, slug: tenant.slug } : null
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored) as { id: string; nome: string; slug: string }
+              setSelectedTenantState(parsed)
+            } catch {
+              setSelectedTenantState(tenantObj)
+            }
+          } else {
+            setSelectedTenantState(tenantObj)
+          }
+        } else {
+          setSelectedTenantState(null)
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Erro ao carregar usuário'
         if (DEBUG_USER_PROVIDER) console.log('fetchUser catch:', message)
@@ -203,6 +221,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       redirectingRef.current = false
       if (event === 'SIGNED_OUT' || !session) {
         setValue({ user: null, loading: false, error: null })
+        setSelectedTenantState(null)
+        if (typeof window !== 'undefined') sessionStorage.removeItem(STORAGE_KEY_SELECTED_TENANT)
         tentativasRef.current = 0
         setTentativas(0)
         return
@@ -218,8 +238,27 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, router])
 
+  const setSelectedTenant = React.useCallback((tenant: { id: string; nome: string; slug: string } | null) => {
+    setSelectedTenantState(tenant)
+    if (typeof window !== 'undefined') {
+      if (tenant) {
+        sessionStorage.setItem(STORAGE_KEY_SELECTED_TENANT, JSON.stringify(tenant))
+      } else {
+        sessionStorage.removeItem(STORAGE_KEY_SELECTED_TENANT)
+      }
+    }
+  }, [])
+
+  const contextValue: UserContextValue = {
+    ...value,
+    selectedTenantId: selectedTenant?.id ?? null,
+    selectedTenant,
+    setSelectedTenant,
+    getActiveTenantId: () => getActiveTenantId(value.user, selectedTenant?.id ?? null),
+  }
+
   return (
-    <UserContext.Provider value={value}>
+    <UserContext.Provider value={contextValue}>
       {children}
     </UserContext.Provider>
   )
