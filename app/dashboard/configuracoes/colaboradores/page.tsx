@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2, FileSpreadsheet } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
@@ -58,7 +59,11 @@ interface Colaborador {
 }
 
 export default function ColaboradoresPage() {
+  const router = useRouter()
   const { user, getActiveTenantId } = useUser()
+  const canView = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('visualizar_colaboradores')
+  const canEdit = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('editar_colaboradores')
+  const canImport = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('importar_planilha')
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([])
   const [setores, setSetores] = useState<Setor[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,6 +77,12 @@ export default function ColaboradoresPage() {
   const [importDialogOpen, setImportDialogOpen] = useState(false)
 
   const supabase = createClient()
+
+  useEffect(() => {
+    if (user && !canView) {
+      router.replace('/dashboard')
+    }
+  }, [user, canView, router])
 
   const fetchColaboradores = async () => {
     const tenantId = getActiveTenantId()
@@ -236,14 +247,18 @@ export default function ColaboradoresPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setImportDialogOpen(true)} className="gap-2">
-            <FileSpreadsheet className="w-4 h-4" />
-            Importar Planilha
-          </Button>
-          <Button onClick={openNewDialog} className="w-full sm:w-auto shrink-0">
-            <Plus className="w-4 h-4" />
-            Novo Colaborador
-          </Button>
+          {canImport && (
+            <Button variant="outline" onClick={() => setImportDialogOpen(true)} className="gap-2">
+              <FileSpreadsheet className="w-4 h-4" />
+              Importar Planilha
+            </Button>
+          )}
+          {canEdit && (
+            <Button onClick={openNewDialog} className="w-full sm:w-auto shrink-0">
+              <Plus className="w-4 h-4" />
+              Novo Colaborador
+            </Button>
+          )}
         </div>
       </div>
 
@@ -261,15 +276,18 @@ export default function ColaboradoresPage() {
                 <TableHead className="font-medium">Nome</TableHead>
                 <TableHead className="font-medium">Setor</TableHead>
                 <TableHead className="font-medium">Data de Cadastro</TableHead>
-                <TableHead className="font-medium w-[120px]">Ações</TableHead>
+                {canEdit && (
+                  <TableHead className="font-medium w-[120px]">Ações</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
               {colaboradores.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-12 text-muted-foreground">
-                    Nenhum colaborador cadastrado. Clique em &quot;Novo Colaborador&quot; para
-                    começar.
+                  <TableCell colSpan={canEdit ? 4 : 3} className="text-center py-12 text-muted-foreground">
+                    {canEdit
+                      ? 'Nenhum colaborador cadastrado. Clique em "Novo Colaborador" para começar.'
+                      : 'Nenhum colaborador cadastrado.'}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -282,27 +300,29 @@ export default function ColaboradoresPage() {
                     <TableCell className="text-muted-foreground">
                       {formatDate(colaborador.criado_em)}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => openEditDialog(colaborador)}
-                          aria-label="Editar colaborador"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => openDeleteDialog(colaborador)}
-                          aria-label="Excluir colaborador"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    {canEdit && (
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => openEditDialog(colaborador)}
+                            aria-label="Editar colaborador"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => openDeleteDialog(colaborador)}
+                            aria-label="Excluir colaborador"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}

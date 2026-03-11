@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { useUser } from '@/lib/use-user'
 import {
   BarChart,
@@ -91,7 +92,10 @@ function getMesesNoPeriodo(dataInicio: string, dataFim: string) {
 }
 
 export default function RelatoriosPage() {
-  const { getActiveTenantId } = useUser()
+  const router = useRouter()
+  const { user, getActiveTenantId } = useUser()
+  const canView = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('visualizar_relatorios')
+  const canExport = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('exportar_excel')
   const activeTenantId = getActiveTenantId()
   const { inicio: defaultInicio, fim: defaultFim } = getUltimoAno()
   const [dataInicio, setDataInicio] = useState(defaultInicio)
@@ -151,6 +155,10 @@ export default function RelatoriosPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (user && !canView) router.replace('/dashboard')
+  }, [user, canView, router])
 
   useEffect(() => {
     if (!activeTenantId) {
@@ -427,15 +435,17 @@ export default function RelatoriosPage() {
             Análise consolidada dos treinamentos
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={handleExportarExcel}
-          disabled={exporting || loading}
-          className="gap-2 shrink-0"
-        >
-          <FileSpreadsheet className="w-4 h-4" />
-          {exporting ? 'Exportando...' : 'Exportar para Excel'}
-        </Button>
+        {canExport && (
+          <Button
+            variant="outline"
+            onClick={handleExportarExcel}
+            disabled={exporting || loading}
+            className="gap-2 shrink-0"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            {exporting ? 'Exportando...' : 'Exportar para Excel'}
+          </Button>
+        )}
       </div>
 
       {/* Filtros */}

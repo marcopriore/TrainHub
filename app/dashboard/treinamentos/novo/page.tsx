@@ -94,7 +94,9 @@ function FormField({
 // ---------- Main Page ----------
 export default function NovoTreinamentoPage() {
   const router = useRouter()
-  const { getActiveTenantId } = useUser()
+  const { user, getActiveTenantId } = useUser()
+  const canRegistrar = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('registrar_treinamento')
+  const canImport = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('importar_planilha')
   const activeTenantId = getActiveTenantId()
   const [empresas, setEmpresas] = useState<EmpresaParceira[]>([])
   const [colaboradores, setColaboradores] = useState<ColaboradorWithSetor[]>([])
@@ -103,6 +105,13 @@ export default function NovoTreinamentoPage() {
   >([])
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const supabase = createClient()
+
+  useEffect(() => {
+    if (user && !canRegistrar) {
+      router.replace('/dashboard')
+      return
+    }
+  }, [user, canRegistrar, router])
 
   useEffect(() => {
     if (!activeTenantId) {
@@ -172,10 +181,12 @@ export default function NovoTreinamentoPage() {
             Preencha os dados do treinamento realizado
           </p>
         </div>
-        <Button variant="outline" onClick={handleOpenImport} className="gap-2 shrink-0">
-          <FileSpreadsheet className="w-4 h-4" />
-          Importar Planilha
-        </Button>
+        {canImport && (
+          <Button variant="outline" onClick={handleOpenImport} className="gap-2 shrink-0">
+            <FileSpreadsheet className="w-4 h-4" />
+            Importar Planilha
+          </Button>
+        )}
       </div>
 
       <Tabs defaultValue="parceiro" className="w-full">

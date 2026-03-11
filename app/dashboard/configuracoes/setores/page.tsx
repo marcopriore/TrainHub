@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
@@ -42,7 +43,10 @@ interface Setor {
 }
 
 export default function SetoresPage() {
+  const router = useRouter()
   const { user, getActiveTenantId } = useUser()
+  const canView = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('visualizar_setores')
+  const canEdit = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('editar_setores')
   const [setores, setSetores] = useState<Setor[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -53,6 +57,10 @@ export default function SetoresPage() {
   const [submitting, setSubmitting] = useState(false)
 
   const supabase = createClient()
+
+  useEffect(() => {
+    if (user && !canView) router.replace('/dashboard')
+  }, [user, canView, router])
 
   const fetchSetores = async () => {
     const tenantId = getActiveTenantId()
@@ -184,10 +192,12 @@ export default function SetoresPage() {
             Gerencie os setores cadastrados na plataforma
           </p>
         </div>
-        <Button onClick={openNewDialog} className="w-full sm:w-auto shrink-0">
-          <Plus className="w-4 h-4" />
-          Novo Setor
-        </Button>
+        {canEdit && (
+          <Button onClick={openNewDialog} className="w-full sm:w-auto shrink-0">
+            <Plus className="w-4 h-4" />
+            Novo Setor
+          </Button>
+        )}
       </div>
 
       <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
@@ -203,14 +213,16 @@ export default function SetoresPage() {
               <TableRow className="bg-muted/30 hover:bg-muted/30">
                 <TableHead className="font-medium">Nome</TableHead>
                 <TableHead className="font-medium">Data de Cadastro</TableHead>
-                <TableHead className="font-medium w-[120px]">Ações</TableHead>
+                {canEdit && (
+                  <TableHead className="font-medium w-[120px]">Ações</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
               {setores.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center py-12 text-muted-foreground">
-                    Nenhum setor cadastrado. Clique em &quot;Novo Setor&quot; para começar.
+                  <TableCell colSpan={canEdit ? 3 : 2} className="text-center py-12 text-muted-foreground">
+                    {canEdit ? 'Nenhum setor cadastrado. Clique em "Novo Setor" para começar.' : 'Nenhum setor cadastrado.'}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -220,27 +232,29 @@ export default function SetoresPage() {
                     <TableCell className="text-muted-foreground">
                       {formatDate(setor.criado_em)}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => openEditDialog(setor)}
-                          aria-label="Editar setor"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => openDeleteDialog(setor)}
-                          aria-label="Excluir setor"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    {canEdit && (
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => openEditDialog(setor)}
+                            aria-label="Editar setor"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => openDeleteDialog(setor)}
+                            aria-label="Excluir setor"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}

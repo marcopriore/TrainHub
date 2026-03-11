@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Eye,
   Trash2,
@@ -516,7 +517,11 @@ function EditTreinamentoForm({
 }
 
 export default function HistoricoPage() {
-  const { getActiveTenantId } = useUser()
+  const router = useRouter()
+  const { user, getActiveTenantId } = useUser()
+  const canView = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('visualizar_historico')
+  const canEdit = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('editar_treinamento')
+  const canDelete = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('excluir_treinamento')
   const activeTenantId = getActiveTenantId()
   const [treinamentos, setTreinamentos] = useState<Treinamento[]>([])
   const [empresas, setEmpresas] = useState<EmpresaParceira[]>([])
@@ -538,6 +543,10 @@ export default function HistoricoPage() {
   const [colaboradoresVinculados, setColaboradoresVinculados] = useState<string[]>([])
 
   const supabase = createClient()
+
+  useEffect(() => {
+    if (user && !canView) router.replace('/dashboard')
+  }, [user, canView, router])
 
   const fetchTreinamentos = async (silent = false) => {
     if (!activeTenantId) {
@@ -891,24 +900,28 @@ export default function HistoricoPage() {
                         <Eye className="w-4 h-4" />
                         Ver Detalhes
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleOpenEdit(t)}
-                        className="gap-1"
-                      >
-                        <Pencil className="w-4 h-4" />
-                        Editar
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => handleOpenDelete(t)}
-                        aria-label="Excluir"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      {canEdit && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenEdit(t)}
+                          className="gap-1"
+                        >
+                          <Pencil className="w-4 h-4" />
+                          Editar
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleOpenDelete(t)}
+                          aria-label="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
@@ -42,7 +43,10 @@ interface EmpresaParceira {
 }
 
 export default function EmpresasParceirasPage() {
+  const router = useRouter()
   const { user, getActiveTenantId } = useUser()
+  const canView = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('visualizar_empresas_parceiras')
+  const canEdit = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('editar_empresas_parceiras')
   const [empresas, setEmpresas] = useState<EmpresaParceira[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -53,6 +57,10 @@ export default function EmpresasParceirasPage() {
   const [submitting, setSubmitting] = useState(false)
 
   const supabase = createClient()
+
+  useEffect(() => {
+    if (user && !canView) router.replace('/dashboard')
+  }, [user, canView, router])
 
   const fetchEmpresas = async () => {
     const tenantId = getActiveTenantId()
@@ -186,10 +194,12 @@ export default function EmpresasParceirasPage() {
             Gerencie as empresas parceiras cadastradas na plataforma
           </p>
         </div>
-        <Button onClick={openNewDialog} className="w-full sm:w-auto shrink-0">
-          <Plus className="w-4 h-4" />
-          Nova Empresa Parceira
-        </Button>
+        {canEdit && (
+          <Button onClick={openNewDialog} className="w-full sm:w-auto shrink-0">
+            <Plus className="w-4 h-4" />
+            Nova Empresa Parceira
+          </Button>
+        )}
       </div>
 
       <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
@@ -205,15 +215,16 @@ export default function EmpresasParceirasPage() {
               <TableRow className="bg-muted/30 hover:bg-muted/30">
                 <TableHead className="font-medium">Nome</TableHead>
                 <TableHead className="font-medium">Data de Cadastro</TableHead>
-                <TableHead className="font-medium w-[120px]">Ações</TableHead>
+                {canEdit && (
+                  <TableHead className="font-medium w-[120px]">Ações</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
               {empresas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center py-12 text-muted-foreground">
-                    Nenhuma empresa parceira cadastrada. Clique em &quot;Nova Empresa
-                    Parceira&quot; para começar.
+                  <TableCell colSpan={canEdit ? 3 : 2} className="text-center py-12 text-muted-foreground">
+                    {canEdit ? 'Nenhuma empresa parceira cadastrada. Clique em "Nova Empresa Parceira" para começar.' : 'Nenhuma empresa parceira cadastrada.'}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -223,8 +234,9 @@ export default function EmpresasParceirasPage() {
                     <TableCell className="text-muted-foreground">
                       {formatDate(empresa.criado_em)}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
+                    {canEdit && (
+                      <TableCell>
+                        <div className="flex items-center gap-2">
                         <Button
                           variant="ghost"
                           size="icon-sm"
@@ -244,6 +256,7 @@ export default function EmpresasParceirasPage() {
                         </Button>
                       </div>
                     </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}
