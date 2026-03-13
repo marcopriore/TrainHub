@@ -19,7 +19,6 @@ import {
   Users,
   ChevronDown,
   ChevronLeft,
-  Shield,
   BookOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -47,8 +46,6 @@ const configNavItems = [
   { href: '/dashboard/gestao/configuracoes/setores', label: 'Setores', icon: Building2, permission: 'gerenciar_setores', masterOnly: false },
   { href: '/dashboard/gestao/configuracoes/empresas-parceiras', label: 'Empresas Parceiras', icon: Briefcase, permission: 'gerenciar_empresas_parceiras', masterOnly: false },
   { href: '/dashboard/gestao/configuracoes/colaboradores', label: 'Colaboradores', icon: Users, permission: 'gerenciar_colaboradores', masterOnly: false },
-  { href: '/dashboard/gestao/configuracoes/perfis', label: 'Perfil de Acesso', icon: Shield, permission: null, masterOnly: true },
-  { href: '/dashboard/gestao/configuracoes/tenants', label: 'Tenants', icon: Building2, permission: null, masterOnly: true },
 ]
 
 interface SidebarProps {

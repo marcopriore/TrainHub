@@ -4,6 +4,7 @@ import Link from 'next/link'
 import {
   GraduationCap,
   LogOut,
+  Settings,
   ClipboardList,
   BookOpen,
   Library,
@@ -12,6 +13,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { useUser } from '@/lib/use-user'
+import { toast } from 'sonner'
 import { NotificacoesSino } from '@/components/notificacoes-sino'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -23,6 +25,12 @@ const COR_AVALIACOES = '#f59e0b'
 
 export default function ModulosPage() {
   const { user, loading } = useUser()
+
+  const podeAcessarGestao =
+    user?.isMaster?.() || user?.hasPermission?.('acessar_modulo_gestao')
+  const podeAcessarTrilhas =
+    user?.isMaster?.() || user?.hasPermission?.('acessar_modulo_trilhas')
+  const podeAcessarConfiguracoes = user?.isMaster?.() || user?.isAdmin?.()
 
   const initials = user?.nome
     ? user.nome
@@ -63,6 +71,15 @@ export default function ModulosPage() {
           </span>
         </div>
         <div className="flex items-center gap-3">
+          {podeAcessarConfiguracoes && (
+            <Link
+              href="/dashboard/configuracoes"
+              title="Configurações do Hub"
+              className="p-2 rounded-lg text-sidebar-foreground/70 hover:text-white hover:bg-sidebar-accent/40 transition-all duration-200"
+            >
+              <Settings className="w-4.5 h-4.5" />
+            </Link>
+          )}
           <Link
             href="/dashboard/perfil"
             className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-sidebar-accent/40 transition-colors"
@@ -100,64 +117,146 @@ export default function ModulosPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-10">
           {/* Card 1 — Gestão de Treinamentos */}
-          <Link
-            href="/dashboard/gestao"
-            className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 hover:shadow-md hover:border-[#00C9A7]/40 transition-all duration-200 cursor-pointer group"
-          >
-            <div className="flex justify-between items-start">
-              <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: `${COR_GESTAO}1a`, color: COR_GESTAO }}
-              >
-                <ClipboardList className="w-6 h-6" />
+          {podeAcessarGestao ? (
+            <Link
+              href="/dashboard/gestao"
+              className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 hover:shadow-md hover:border-[#00C9A7]/40 transition-all duration-200 cursor-pointer group"
+            >
+              <div className="flex justify-between items-start">
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${COR_GESTAO}1a`, color: COR_GESTAO }}
+                >
+                  <ClipboardList className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400">
+                  Ativo
+                </span>
               </div>
-              <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400">
-                Ativo
-              </span>
+              <div>
+                <h2 className="font-semibold text-lg text-foreground">
+                  Gestão de Treinamentos
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Registre, acompanhe e analise todos os treinamentos corporativos
+                </p>
+              </div>
+              <div className="flex items-center gap-1 text-sm font-medium" style={{ color: COR_GESTAO }}>
+                <span>Acessar</span>
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            </Link>
+          ) : (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() =>
+                toast.error('Você não tem permissão para acessar este módulo. Entre em contato com o administrador.')
+              }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  toast.error('Você não tem permissão para acessar este módulo. Entre em contato com o administrador.')
+                }
+              }}
+              className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 opacity-60 cursor-not-allowed"
+            >
+              <div className="flex justify-between items-start">
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${COR_GESTAO}1a`, color: COR_GESTAO }}
+                >
+                  <ClipboardList className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                  Sem acesso
+                </span>
+              </div>
+              <div>
+                <h2 className="font-semibold text-lg text-foreground">
+                  Gestão de Treinamentos
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Registre, acompanhe e analise todos os treinamentos corporativos
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Lock className="w-4 h-4" />
+                <span>Sem acesso</span>
+              </div>
             </div>
-            <div>
-              <h2 className="font-semibold text-lg text-foreground">
-                Gestão de Treinamentos
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Registre, acompanhe e analise todos os treinamentos corporativos
-              </p>
-            </div>
-            <div className="flex items-center gap-1 text-sm font-medium" style={{ color: COR_GESTAO }}>
-              <span>Acessar</span>
-              <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-            </div>
-          </Link>
+          )}
 
           {/* Card 2 — Trilhas de Conhecimento */}
-          <Link
-            href="/dashboard/gestao/minhas-trilhas"
-            className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 hover:shadow-md hover:border-[#3b82f6]/40 transition-all duration-200 cursor-pointer group"
-          >
-            <div className="flex justify-between items-start">
-              <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: `${COR_TRILHAS}1a`, color: COR_TRILHAS }}
-              >
-                <BookOpen className="w-6 h-6" />
+          {podeAcessarTrilhas ? (
+            <Link
+              href="/dashboard/gestao/minhas-trilhas"
+              className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 hover:shadow-md hover:border-[#3b82f6]/40 transition-all duration-200 cursor-pointer group"
+            >
+              <div className="flex justify-between items-start">
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${COR_TRILHAS}1a`, color: COR_TRILHAS }}
+                >
+                  <BookOpen className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400">
+                  Ativo
+                </span>
               </div>
-              <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400">
-                Ativo
-              </span>
+              <div>
+                <h2 className="font-semibold text-lg text-foreground">
+                  Trilhas de Conhecimento
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Acompanhe sua jornada de aprendizado e evolução profissional
+                </p>
+              </div>
+              <div className="flex items-center gap-1 text-sm font-medium" style={{ color: COR_TRILHAS }}>
+                <span>Acessar</span>
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            </Link>
+          ) : (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() =>
+                toast.error('Você não tem permissão para acessar este módulo. Entre em contato com o administrador.')
+              }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  toast.error('Você não tem permissão para acessar este módulo. Entre em contato com o administrador.')
+                }
+              }}
+              className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 opacity-60 cursor-not-allowed"
+            >
+              <div className="flex justify-between items-start">
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${COR_TRILHAS}1a`, color: COR_TRILHAS }}
+                >
+                  <BookOpen className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                  Sem acesso
+                </span>
+              </div>
+              <div>
+                <h2 className="font-semibold text-lg text-foreground">
+                  Trilhas de Conhecimento
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Acompanhe sua jornada de aprendizado e evolução profissional
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Lock className="w-4 h-4" />
+                <span>Sem acesso</span>
+              </div>
             </div>
-            <div>
-              <h2 className="font-semibold text-lg text-foreground">
-                Trilhas de Conhecimento
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Acompanhe sua jornada de aprendizado e evolução profissional
-              </p>
-            </div>
-            <div className="flex items-center gap-1 text-sm font-medium" style={{ color: COR_TRILHAS }}>
-              <span>Acessar</span>
-              <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-            </div>
-          </Link>
+          )}
 
           {/* Card 3 — Catálogo de Treinamentos */}
           <div

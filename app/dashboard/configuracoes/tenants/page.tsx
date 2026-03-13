@@ -93,7 +93,7 @@ export default function TenantsPage() {
 
   useEffect(() => {
     if (!userLoading && (!user || !user.isMaster())) {
-      router.push('/dashboard/gestao')
+      router.push('/dashboard')
     }
   }, [user, userLoading, router])
 
@@ -207,7 +207,16 @@ export default function TenantsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="font-serif text-2xl font-bold text-foreground">Tenants</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="font-serif text-2xl font-bold text-foreground">Tenants</h1>
+            <span className="text-muted-foreground">|</span>
+            <Link
+              href="/dashboard/configuracoes"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 flex items-center gap-1"
+            >
+              ← Configurações
+            </Link>
+          </div>
           <p className="text-muted-foreground text-sm mt-1">
             Gerencie os tenants (clientes) do TrainHub
           </p>
@@ -290,7 +299,7 @@ export default function TenantsPage() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Button variant="ghost" size="icon-sm" asChild aria-label="Editar tenant">
-                        <Link href={`/dashboard/gestao/configuracoes/tenants/${tenant.id}`}>
+                        <Link href={`/dashboard/configuracoes/tenants/${tenant.id}`}>
                           <Pencil className="w-4 h-4" />
                         </Link>
                       </Button>

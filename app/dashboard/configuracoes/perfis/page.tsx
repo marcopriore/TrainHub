@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Plus, Pencil, Trash2, Shield } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
@@ -38,7 +39,13 @@ import {
 } from '@/components/ui/table'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
+const PERMISSOES_ACESSO_MODULOS: Permissao[] = [
+  'acessar_modulo_gestao',
+  'acessar_modulo_trilhas',
+]
+
 const PERMISSOES_EDITAVEIS: Permissao[] = [
+  ...PERMISSOES_ACESSO_MODULOS,
   'ver_dashboard_geral',
   'ver_minhas_trilhas',
   'visualizar_colaboradores',
@@ -273,7 +280,16 @@ export default function PerfisPage() {
     return (
       <div className="flex flex-col gap-6">
         <div>
-          <h1 className="font-serif text-2xl font-bold text-foreground">Perfil de Acesso</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="font-serif text-2xl font-bold text-foreground">Perfil de Acesso</h1>
+            <span className="text-muted-foreground">|</span>
+            <Link
+              href="/dashboard/configuracoes"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 flex items-center gap-1"
+            >
+              ← Configurações
+            </Link>
+          </div>
           <p className="text-muted-foreground text-sm mt-1">
             Selecione um tenant para gerenciar os perfis de acesso
           </p>
@@ -291,7 +307,16 @@ export default function PerfisPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="font-serif text-2xl font-bold text-foreground">Perfil de Acesso</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="font-serif text-2xl font-bold text-foreground">Perfil de Acesso</h1>
+            <span className="text-muted-foreground">|</span>
+            <Link
+              href="/dashboard/configuracoes"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 flex items-center gap-1"
+            >
+              ← Configurações
+            </Link>
+          </div>
           <p className="text-muted-foreground text-sm mt-1">
             Crie perfis e defina o que cada um pode fazer na plataforma
           </p>
@@ -401,26 +426,57 @@ export default function PerfisPage() {
             <div className="space-y-2">
               <Label>Permissões</Label>
               <ScrollArea className="h-[240px] rounded-md border border-border p-3">
-                <div className="space-y-2">
-                  {PERMISSOES_EDITAVEIS.map((perm) => (
-                    <div
-                      key={perm}
-                      className="flex items-center space-x-2"
-                    >
-                      <Checkbox
-                        id={perm}
-                        checked={permissoesSelecionadas.has(perm)}
-                        onCheckedChange={() => togglePermissao(perm)}
-                        disabled={editingPerfil?.is_admin}
-                      />
-                      <label
-                        htmlFor={perm}
-                        className="text-sm font-medium leading-none cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        {PERMISSOES_LABELS[perm] ?? perm}
-                      </label>
-                    </div>
-                  ))}
+                <div className="space-y-4">
+                  {/* Acesso a Módulos */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-foreground">
+                      Acesso a Módulos
+                    </p>
+                    {PERMISSOES_ACESSO_MODULOS.map((perm) => (
+                      <div key={perm} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={perm}
+                          checked={permissoesSelecionadas.has(perm)}
+                          onCheckedChange={() => togglePermissao(perm)}
+                          disabled={editingPerfil?.is_admin}
+                        />
+                        <label
+                          htmlFor={perm}
+                          className="text-sm font-medium leading-none cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          {PERMISSOES_LABELS[perm] ?? perm}
+                        </label>
+                      </div>
+                    ))}
+                    {editingPerfil?.is_admin && (
+                      <p className="text-xs text-muted-foreground pt-1">
+                        Perfis Admin herdam acesso completo às permissões internas
+                        de cada módulo. O acesso aos módulos ainda pode ser
+                        restringido acima.
+                      </p>
+                    )}
+                  </div>
+                  {/* Demais permissões */}
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    {PERMISSOES_EDITAVEIS.filter(
+                      (p) => !PERMISSOES_ACESSO_MODULOS.includes(p)
+                    ).map((perm) => (
+                      <div key={perm} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={perm}
+                          checked={permissoesSelecionadas.has(perm)}
+                          onCheckedChange={() => togglePermissao(perm)}
+                          disabled={editingPerfil?.is_admin}
+                        />
+                        <label
+                          htmlFor={perm}
+                          className="text-sm font-medium leading-none cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          {PERMISSOES_LABELS[perm] ?? perm}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </ScrollArea>
             </div>
