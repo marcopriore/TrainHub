@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, Shield } from 'lucide-react'
+import { Plus, Pencil, Trash2, Shield, LayoutGrid, ClipboardList, BookOpen } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@/lib/use-user'
-import { PERMISSOES_LABELS, type Permissao } from '@/lib/user-context'
+import { type Permissao } from '@/lib/user-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -39,32 +39,120 @@ import {
 } from '@/components/ui/table'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
-const PERMISSOES_ACESSO_MODULOS: Permissao[] = [
-  'acessar_modulo_gestao',
-  'acessar_modulo_trilhas',
+const ICON_MAP = {
+  LayoutGrid,
+  Shield,
+  ClipboardList,
+  BookOpen,
+} as const
+
+const PERMISSOES_AGRUPADAS = [
+  {
+    grupo: 'Acesso aos Módulos',
+    icone: 'LayoutGrid' as const,
+    cor: '#00C9A7',
+    categorias: [
+      {
+        categoria: null as string | null,
+        permissoes: [
+          { key: 'acessar_modulo_gestao' as const, label: 'Gestão de Treinamentos' },
+          { key: 'acessar_modulo_trilhas' as const, label: 'Trilhas de Conhecimento' },
+        ],
+      },
+    ],
+  },
+  {
+    grupo: 'Administração',
+    icone: 'Shield' as const,
+    cor: '#8b5cf6',
+    categorias: [
+      {
+        categoria: null as string | null,
+        permissoes: [
+          { key: 'gerenciar_usuarios' as const, label: 'Gerenciar Usuários' },
+          { key: 'gerenciar_perfis' as const, label: 'Gerenciar Perfis de Acesso' },
+        ],
+      },
+    ],
+  },
+  {
+    grupo: 'Módulo: Gestão de Treinamentos',
+    icone: 'ClipboardList' as const,
+    cor: '#3b82f6',
+    categorias: [
+      {
+        categoria: 'Treinamentos',
+        permissoes: [
+          { key: 'registrar_treinamento_parceiro' as const, label: 'Registrar (Parceiro)' },
+          { key: 'registrar_treinamento_colaborador' as const, label: 'Registrar (Colaborador)' },
+          { key: 'editar_treinamento' as const, label: 'Editar' },
+          { key: 'excluir_treinamento' as const, label: 'Excluir' },
+          { key: 'visualizar_historico' as const, label: 'Visualizar Histórico' },
+        ],
+      },
+      {
+        categoria: 'Relatórios',
+        permissoes: [
+          { key: 'visualizar_relatorios' as const, label: 'Visualizar Relatórios' },
+          { key: 'exportar_excel' as const, label: 'Exportar Excel' },
+        ],
+      },
+      {
+        categoria: 'Colaboradores',
+        permissoes: [
+          { key: 'visualizar_colaboradores' as const, label: 'Visualizar' },
+          { key: 'gerenciar_colaboradores' as const, label: 'Editar/Criar' },
+          { key: 'importar_planilha' as const, label: 'Importar Planilha' },
+        ],
+      },
+      {
+        categoria: 'Setores',
+        permissoes: [
+          { key: 'visualizar_setores' as const, label: 'Visualizar' },
+          { key: 'gerenciar_setores' as const, label: 'Editar/Criar' },
+        ],
+      },
+      {
+        categoria: 'Empresas Parceiras',
+        permissoes: [
+          { key: 'visualizar_empresas_parceiras' as const, label: 'Visualizar' },
+          { key: 'gerenciar_empresas_parceiras' as const, label: 'Editar/Criar' },
+        ],
+      },
+      {
+        categoria: 'Dashboard',
+        permissoes: [{ key: 'ver_dashboard_geral' as const, label: 'Ver Dashboard Geral' }],
+      },
+    ],
+  },
+  {
+    grupo: 'Módulo: Trilhas de Conhecimento',
+    icone: 'BookOpen' as const,
+    cor: '#3b82f6',
+    categorias: [
+      {
+        categoria: 'Trilhas',
+        permissoes: [{ key: 'ver_minhas_trilhas' as const, label: 'Ver Minhas Trilhas' }],
+      },
+    ],
+  },
 ]
 
-const PERMISSOES_EDITAVEIS: Permissao[] = [
-  ...PERMISSOES_ACESSO_MODULOS,
-  'ver_dashboard_geral',
-  'ver_minhas_trilhas',
-  'visualizar_colaboradores',
-  'editar_colaboradores',
-  'visualizar_setores',
-  'editar_setores',
-  'visualizar_empresas_parceiras',
-  'editar_empresas_parceiras',
-  'visualizar_historico',
-  'registrar_treinamento_parceiro',
-  'registrar_treinamento_colaborador',
-  'editar_treinamento',
-  'excluir_treinamento',
-  'importar_planilha',
-  'visualizar_relatorios',
-  'exportar_excel',
-  'gerenciar_usuarios',
-  'gerenciar_perfis',
-]
+const GRUPOS_EDITAVEIS_ADMIN = ['Acesso aos Módulos', 'Administração']
+
+function getTodasPermissoes(): string[] {
+  const keys: string[] = []
+  for (const g of PERMISSOES_AGRUPADAS) {
+    for (const cat of g.categorias) {
+      for (const p of cat.permissoes) {
+        keys.push(p.key)
+      }
+    }
+  }
+  return keys
+}
+
+const PERMISSOES_EDITAVEIS = getTodasPermissoes() as Permissao[]
 
 interface Perfil {
   id: string
@@ -152,6 +240,33 @@ export default function PerfisPage() {
       else next.add(perm)
       return next
     })
+  }
+
+  const getPermissoesDoGrupo = (grupo: (typeof PERMISSOES_AGRUPADAS)[number]) => {
+    const keys: string[] = []
+    for (const cat of grupo.categorias) {
+      for (const p of cat.permissoes) keys.push(p.key)
+    }
+    return keys
+  }
+
+  const toggleGrupo = (grupo: (typeof PERMISSOES_AGRUPADAS)[number]) => {
+    const keys = getPermissoesDoGrupo(grupo)
+    const todasMarcadas = keys.every((k) => permissoesSelecionadas.has(k))
+    setPermissoesSelecionadas((prev) => {
+      const next = new Set(prev)
+      if (todasMarcadas) keys.forEach((k) => next.delete(k))
+      else keys.forEach((k) => next.add(k))
+      return next
+    })
+  }
+
+  const getGrupoCheckState = (grupo: (typeof PERMISSOES_AGRUPADAS)[number]) => {
+    const keys = getPermissoesDoGrupo(grupo)
+    const marcadas = keys.filter((k) => permissoesSelecionadas.has(k)).length
+    if (marcadas === 0) return false
+    if (marcadas === keys.length) return true
+    return 'indeterminate'
   }
 
   const handleSave = async () => {
@@ -425,58 +540,108 @@ export default function PerfisPage() {
             </div>
             <div className="space-y-2">
               <Label>Permissões</Label>
-              <ScrollArea className="h-[240px] rounded-md border border-border p-3">
-                <div className="space-y-4">
-                  {/* Acesso a Módulos */}
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold text-foreground">
-                      Acesso a Módulos
-                    </p>
-                    {PERMISSOES_ACESSO_MODULOS.map((perm) => (
-                      <div key={perm} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={perm}
-                          checked={permissoesSelecionadas.has(perm)}
-                          onCheckedChange={() => togglePermissao(perm)}
-                          disabled={editingPerfil?.is_admin}
-                        />
-                        <label
-                          htmlFor={perm}
-                          className="text-sm font-medium leading-none cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {PERMISSOES_LABELS[perm] ?? perm}
-                        </label>
+              {editingPerfil?.is_admin && (
+                <p className="text-xs text-muted-foreground mb-3">
+                  Perfis Admin têm acesso completo às permissões internas.
+                  Configure apenas o acesso aos módulos acima.
+                </p>
+              )}
+              <ScrollArea className="h-[340px] rounded-md border border-border p-3">
+                <div className="space-y-1">
+                  {PERMISSOES_AGRUPADAS.map((grupo) => {
+                    const Icone = ICON_MAP[grupo.icone]
+                    const isGrupoEditavelAdmin =
+                      editingPerfil?.is_admin &&
+                      GRUPOS_EDITAVEIS_ADMIN.includes(grupo.grupo)
+                    const isGrupoDisabled =
+                      editingPerfil?.is_admin &&
+                      !GRUPOS_EDITAVEIS_ADMIN.includes(grupo.grupo)
+
+                    return (
+                      <div
+                        key={grupo.grupo}
+                        className={`border-l-2 pl-4 mb-4 ${
+                          isGrupoDisabled ? 'opacity-50' : ''
+                        }`}
+                        style={{ borderLeftColor: grupo.cor }}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <div
+                            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{
+                              backgroundColor: `${grupo.cor}20`,
+                              color: grupo.cor,
+                            }}
+                          >
+                            <Icone className="w-3.5 h-3.5" />
+                          </div>
+                          <p className="font-semibold text-foreground text-sm">
+                            {grupo.grupo}
+                          </p>
+                        </div>
+                        <div className="border-t border-border/60 pt-2">
+                          {!isGrupoDisabled && (
+                            <div className="flex items-center gap-2 mb-2">
+                              <Checkbox
+                                id={`sel-${grupo.grupo}`}
+                                checked={getGrupoCheckState(grupo)}
+                                onCheckedChange={() => toggleGrupo(grupo)}
+                                disabled={editingPerfil?.is_admin}
+                              />
+                              <label
+                                htmlFor={`sel-${grupo.grupo}`}
+                                className="text-xs text-muted-foreground cursor-pointer"
+                              >
+                                Selecionar todos
+                              </label>
+                            </div>
+                          )}
+                          {grupo.categorias.map((cat, cIdx) => (
+                            <div
+                              key={cat.categoria ?? `cat-${cIdx}`}
+                              className={cat.categoria ? 'mt-3' : ''}
+                            >
+                              {cat.categoria && (
+                                <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
+                                  {cat.categoria}
+                                </p>
+                              )}
+                              <div className="grid grid-cols-2 gap-2">
+                                {cat.permissoes.map((p) => (
+                                  <div
+                                    key={p.key}
+                                    className="flex items-center space-x-2"
+                                  >
+                                    <Checkbox
+                                      id={p.key}
+                                      checked={permissoesSelecionadas.has(
+                                        p.key
+                                      )}
+                                      onCheckedChange={() =>
+                                        togglePermissao(p.key)
+                                      }
+                                      disabled={
+                                        editingPerfil?.is_admin &&
+                                        !GRUPOS_EDITAVEIS_ADMIN.includes(
+                                          grupo.grupo
+                                        )
+                                      }
+                                    />
+                                    <label
+                                      htmlFor={p.key}
+                                      className="text-sm leading-none cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                    >
+                                      {p.label}
+                                    </label>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))}
-                    {editingPerfil?.is_admin && (
-                      <p className="text-xs text-muted-foreground pt-1">
-                        Perfis Admin herdam acesso completo às permissões internas
-                        de cada módulo. O acesso aos módulos ainda pode ser
-                        restringido acima.
-                      </p>
-                    )}
-                  </div>
-                  {/* Demais permissões */}
-                  <div className="space-y-2 pt-2 border-t border-border">
-                    {PERMISSOES_EDITAVEIS.filter(
-                      (p) => !PERMISSOES_ACESSO_MODULOS.includes(p)
-                    ).map((perm) => (
-                      <div key={perm} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={perm}
-                          checked={permissoesSelecionadas.has(perm)}
-                          onCheckedChange={() => togglePermissao(perm)}
-                          disabled={editingPerfil?.is_admin}
-                        />
-                        <label
-                          htmlFor={perm}
-                          className="text-sm font-medium leading-none cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {PERMISSOES_LABELS[perm] ?? perm}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
+                    )
+                  })}
                 </div>
               </ScrollArea>
             </div>
