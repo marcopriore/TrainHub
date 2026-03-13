@@ -94,7 +94,6 @@ const LEGACY_MAP: Record<string, string[]> = {
   gerenciar_colaboradores: ['visualizar_colaboradores', 'editar_colaboradores'],
   gerenciar_setores: ['visualizar_setores', 'editar_setores'],
   gerenciar_empresas_parceiras: ['visualizar_empresas_parceiras', 'editar_empresas_parceiras'],
-  registrar_treinamento: ['registrar_treinamento_parceiro', 'registrar_treinamento_colaborador'],
 }
 
 export function createUserWithHelpers(user: Omit<UserContextData, 'hasPermission' | 'isAdmin' | 'isMaster'>): UserContextData {

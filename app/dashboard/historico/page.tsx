@@ -556,12 +556,51 @@ export default function HistoricoPage() {
     }
     if (!silent) setLoading(true)
     try {
+      if (user?.isMaster() || user?.isAdmin?.()) {
+        const { data, error } = await supabase
+          .from('treinamentos')
+          .select('*, empresas_parceiras(nome)')
+          .eq('tenant_id', activeTenantId)
+          .order('data_treinamento', { ascending: false })
+        if (error) throw error
+        setTreinamentos((data as Treinamento[]) ?? [])
+        return
+      }
+
+      const userEmail = user?.email
+      if (!userEmail) {
+        setTreinamentos([])
+        return
+      }
+
+      const { data: colData, error: colError } = await supabase
+        .from('colaboradores')
+        .select('id')
+        .eq('tenant_id', activeTenantId)
+        .eq('email', userEmail)
+        .single()
+      if (colError || !colData) {
+        setTreinamentos([])
+        return
+      }
+
+      const colaboradorId = (colData as { id: string }).id
+      const { data: tcData, error: tcError } = await supabase
+        .from('treinamento_colaboradores')
+        .select('treinamento_id')
+        .eq('colaborador_id', colaboradorId)
+      if (tcError) throw tcError
+      const ids = (tcData ?? []).map((r: { treinamento_id: string }) => r.treinamento_id)
+      if (ids.length === 0) {
+        setTreinamentos([])
+        return
+      }
+
       const { data, error } = await supabase
         .from('treinamentos')
         .select('*, empresas_parceiras(nome)')
-        .eq('tenant_id', activeTenantId)
+        .in('id', ids)
         .order('data_treinamento', { ascending: false })
-
       if (error) throw error
       setTreinamentos((data as Treinamento[]) ?? [])
     } catch (error) {

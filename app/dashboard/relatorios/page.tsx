@@ -117,21 +117,85 @@ export default function RelatoriosPage() {
         setLoading(false)
         return
       }
+      if (user?.isMaster() || user?.isAdmin?.()) {
+        let query = supabase
+          .from('treinamentos')
+          .select('id, tipo, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, empresa_parceira_id, empresas_parceiras(nome)')
+          .eq('tenant_id', activeTenantId)
+          .gte('data_treinamento', appliedFilters.dataInicio)
+          .lte('data_treinamento', appliedFilters.dataFim)
+
+        if (appliedFilters.filtroTipo !== 'todos') {
+          query = query.eq('tipo', appliedFilters.filtroTipo)
+        }
+
+        const { data: trData, error: trErr } = await query.order('data_treinamento', { ascending: true })
+        if (trErr) throw trErr
+        setTreinamentos((trData as Treinamento[]) ?? [])
+
+        const { data: tcRes, error: tcErr } = await supabase
+          .from('treinamento_colaboradores')
+          .select(`
+            treinamento_id,
+            colaborador_id,
+            treinamentos(carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao),
+            colaboradores(nome, setor_id, setores(nome))
+          `)
+        if (tcErr) throw tcErr
+
+        const tcList = (tcRes as TreinamentoColaboradorRow[]) ?? []
+        const trIds = new Set((trData as Treinamento[])?.map((t) => t.id) ?? [])
+        const filtered = tcList.filter((tc) => trIds.has(tc.treinamento_id))
+        setTcData(filtered)
+        return
+      }
+
+      const userEmail = user?.email
+      if (!userEmail) {
+        setTreinamentos([])
+        setTcData([])
+        return
+      }
+
+      const { data: colData, error: colError } = await supabase
+        .from('colaboradores')
+        .select('id')
+        .eq('tenant_id', activeTenantId)
+        .eq('email', userEmail)
+        .single()
+      if (colError || !colData) {
+        setTreinamentos([])
+        setTcData([])
+        return
+      }
+
+      const colaboradorId = (colData as { id: string }).id
+      const { data: tcIdsRes, error: tcIdsErr } = await supabase
+        .from('treinamento_colaboradores')
+        .select('treinamento_id')
+        .eq('colaborador_id', colaboradorId)
+      if (tcIdsErr) throw tcIdsErr
+      const ids = (tcIdsRes ?? []).map((r: { treinamento_id: string }) => r.treinamento_id)
+      if (ids.length === 0) {
+        setTreinamentos([])
+        setTcData([])
+        return
+      }
+
       let query = supabase
         .from('treinamentos')
         .select('id, tipo, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, empresa_parceira_id, empresas_parceiras(nome)')
-        .eq('tenant_id', activeTenantId)
+        .in('id', ids)
         .gte('data_treinamento', appliedFilters.dataInicio)
         .lte('data_treinamento', appliedFilters.dataFim)
-
       if (appliedFilters.filtroTipo !== 'todos') {
         query = query.eq('tipo', appliedFilters.filtroTipo)
       }
-
       const { data: trData, error: trErr } = await query.order('data_treinamento', { ascending: true })
       if (trErr) throw trErr
       setTreinamentos((trData as Treinamento[]) ?? [])
 
+      const trIds = new Set((trData as Treinamento[])?.map((t) => t.id) ?? [])
       const { data: tcRes, error: tcErr } = await supabase
         .from('treinamento_colaboradores')
         .select(`
@@ -140,12 +204,10 @@ export default function RelatoriosPage() {
           treinamentos(carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao),
           colaboradores(nome, setor_id, setores(nome))
         `)
+        .eq('colaborador_id', colaboradorId)
+        .in('treinamento_id', Array.from(trIds))
       if (tcErr) throw tcErr
-
-      const tcList = (tcRes as TreinamentoColaboradorRow[]) ?? []
-      const trIds = new Set((trData as Treinamento[])?.map((t) => t.id) ?? [])
-      const filtered = tcList.filter((tc) => trIds.has(tc.treinamento_id))
-      setTcData(filtered)
+      setTcData((tcRes as TreinamentoColaboradorRow[]) ?? [])
     } catch (error) {
       console.error('Erro ao carregar relatórios:', error)
       toast.error('Não foi possível carregar os dados. Tente novamente.')

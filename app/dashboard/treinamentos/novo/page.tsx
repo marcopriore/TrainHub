@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { PlusCircle, Trash2, Building2, Users, FileSpreadsheet } from 'lucide-react'
+import { PlusCircle, Trash2, Building2, Users, FileSpreadsheet, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@/lib/use-user'
@@ -64,7 +64,7 @@ interface ColaboradorWithSetor {
   id: string
   nome: string
   setor_id: string | null
-  setores: { nome: string } | null
+  setores?: { nome: string } | null
 }
 
 // ---------- Shared Components ----------
@@ -95,13 +95,18 @@ function FormField({
 export default function NovoTreinamentoPage() {
   const router = useRouter()
   const { user, getActiveTenantId } = useUser()
-  const canRegistrarParceiro = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('registrar_treinamento_parceiro')
-  const canRegistrarColaborador = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('registrar_treinamento_colaborador')
+  const canRegistrarParceiro =
+    user?.hasPermission?.('registrar_treinamento_parceiro') || user?.isAdmin?.() || user?.isMaster?.()
+  const canRegistrarColaborador =
+    user?.hasPermission?.('registrar_treinamento_colaborador') || user?.isAdmin?.() || user?.isMaster?.()
   const canRegistrar = canRegistrarParceiro || canRegistrarColaborador
   const canImport = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('importar_planilha')
+  const isColaboradorLimited =
+    !user?.isAdmin?.() && !user?.isMaster?.() && !user?.hasPermission?.('registrar_treinamento_parceiro')
   const activeTenantId = getActiveTenantId()
   const [empresas, setEmpresas] = useState<EmpresaParceira[]>([])
   const [colaboradores, setColaboradores] = useState<ColaboradorWithSetor[]>([])
+  const [colaboradorLogado, setColaboradorLogado] = useState<{ id: string; nome: string } | null>(null)
   const [treinamentosExistentes, setTreinamentosExistentes] = useState<
     { nome: string; data_treinamento: string }[]
   >([])
@@ -131,9 +136,9 @@ export default function NovoTreinamentoPage() {
             .order('nome', { ascending: true }),
           supabase
             .from('colaboradores')
-            .select('id, nome, setor_id, setores(nome)')
+            .select('id, nome, setor_id')
             .eq('tenant_id', activeTenantId)
-            .order('nome', { ascending: true }),
+            .order('nome'),
         ])
         if (empRes.error) throw empRes.error
         if (colRes.error) throw colRes.error
@@ -146,6 +151,29 @@ export default function NovoTreinamentoPage() {
     }
     loadData()
   }, [activeTenantId])
+
+  useEffect(() => {
+    if (!isColaboradorLimited || !user?.email || !activeTenantId) {
+      setColaboradorLogado(null)
+      return
+    }
+    const fetchColaboradorByEmail = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('colaboradores')
+          .select('id, nome')
+          .eq('email', user.email)
+          .eq('tenant_id', activeTenantId)
+          .maybeSingle()
+        if (error) throw error
+        setColaboradorLogado((data as { id: string; nome: string } | null) ?? null)
+      } catch (err) {
+        console.error('Erro ao buscar colaborador:', err)
+        setColaboradorLogado(null)
+      }
+    }
+    fetchColaboradorByEmail()
+  }, [isColaboradorLimited, user?.email, activeTenantId])
 
   const fetchTreinamentosExistentes = async () => {
     if (!activeTenantId) return
@@ -238,6 +266,8 @@ export default function NovoTreinamentoPage() {
             colaboradores={colaboradores}
             tenantId={activeTenantId}
             formatColaboradorLabel={formatColaboradorLabel}
+            isColaboradorLimited={isColaboradorLimited}
+            colaboradorLogado={colaboradorLogado}
             onSuccess={() => {
               toast.success('Treinamento salvo com sucesso.')
               router.push('/dashboard/treinamentos')
@@ -501,24 +531,39 @@ function ColaboradorForm({
   colaboradores,
   tenantId,
   formatColaboradorLabel,
+  isColaboradorLimited,
+  colaboradorLogado,
   onSuccess,
 }: {
   empresas: EmpresaParceira[]
   colaboradores: ColaboradorWithSetor[]
   tenantId: string | null
   formatColaboradorLabel: (c: ColaboradorWithSetor) => string
+  isColaboradorLimited: boolean
+  colaboradorLogado: { id: string; nome: string } | null
   onSuccess: () => void
 }) {
   const {
     register,
     handleSubmit,
     control,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<ColaboradorForm>({
     resolver: zodResolver(colaboradorSchema),
-    defaultValues: { colaboradores: [{ colaboradorId: '' }] },
+    defaultValues: {
+      colaboradores: colaboradorLogado && isColaboradorLimited
+        ? [{ colaboradorId: colaboradorLogado.id }]
+        : [{ colaboradorId: '' }],
+    },
     mode: 'onChange',
   })
+
+  useEffect(() => {
+    if (isColaboradorLimited && colaboradorLogado) {
+      reset({ colaboradores: [{ colaboradorId: colaboradorLogado.id }] }, { keepDefaultValues: false })
+    }
+  }, [isColaboradorLimited, colaboradorLogado, reset])
 
   const { fields, append, remove } = useFieldArray({ control, name: 'colaboradores' })
 
@@ -688,80 +733,93 @@ function ColaboradorForm({
 
       {/* Colaboradores Section */}
       <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <Label className="text-sm font-medium text-foreground">
-            Colaboradores do Treinamento
-          </Label>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => append({ colaboradorId: '' })}
-            className="gap-2 text-primary border-primary/30 hover:bg-primary/5"
-          >
-            <PlusCircle className="w-4 h-4" />
-            Adicionar Colaborador
-          </Button>
-        </div>
-        {(errors.colaboradores as { message?: string } | undefined)?.message && (
-          <FieldError
-            message={(errors.colaboradores as { message?: string })?.message}
-          />
-        )}
-        <div className="flex flex-col gap-2">
-          {fields.map((field, index) => (
-            <div
-              key={field.id}
-              className="flex items-start gap-3 p-3 bg-muted/40 rounded-lg border border-border"
-            >
-              <div className="flex-1">
-                <Controller
-                  control={control}
-                  name={`colaboradores.${index}.colaboradorId`}
-                  render={({ field }) => (
-                    <Select
-                      value={field.value || undefined}
-                      onValueChange={field.onChange}
-                    >
-                      <SelectTrigger className="w-full bg-card">
-                        <SelectValue placeholder="Selecione o colaborador" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {colaboradores.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {formatColaboradorLabel(c)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-                <FieldError
-                  message={
-                    errors.colaboradores?.[index]?.colaboradorId?.message
-                  }
-                />
-              </div>
-              {fields.length > 1 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => remove(index)}
-                  className="text-muted-foreground hover:text-destructive shrink-0"
-                  aria-label="Remover colaborador"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              )}
+        <Label className="text-sm font-medium text-foreground">
+          Colaboradores do Treinamento
+        </Label>
+        {isColaboradorLimited && colaboradorLogado ? (
+          <div className="flex items-center gap-3 p-3 bg-muted/60 rounded-lg border border-border">
+            <Lock className="w-4 h-4 text-muted-foreground shrink-0" />
+            <span className="font-medium text-foreground">{colaboradorLogado.nome}</span>
+          </div>
+        ) : isColaboradorLimited ? (
+          <p className="text-sm text-muted-foreground py-2">
+            Colaborador não encontrado. Verifique se seu e-mail está vinculado ao cadastro.
+          </p>
+        ) : (
+          <>
+            <div className="flex items-center justify-between">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => append({ colaboradorId: '' })}
+                className="gap-2 text-primary border-primary/30 hover:bg-primary/5"
+              >
+                <PlusCircle className="w-4 h-4" />
+                Adicionar Colaborador
+              </Button>
             </div>
-          ))}
-        </div>
+            {(errors.colaboradores as { message?: string } | undefined)?.message && (
+              <FieldError
+                message={(errors.colaboradores as { message?: string })?.message}
+              />
+            )}
+            <div className="flex flex-col gap-2">
+              {fields.map((field, index) => (
+                <div
+                  key={field.id}
+                  className="flex items-start gap-3 p-3 bg-muted/40 rounded-lg border border-border"
+                >
+                  <div className="flex-1">
+                    <Controller
+                      control={control}
+                      name={`colaboradores.${index}.colaboradorId`}
+                      render={({ field: f }) => (
+                        <Select
+                          value={f.value || undefined}
+                          onValueChange={f.onChange}
+                        >
+                          <SelectTrigger className="w-full bg-card">
+                            <SelectValue placeholder="Selecione o colaborador" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {colaboradores.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {formatColaboradorLabel(c)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    <FieldError
+                      message={
+                        errors.colaboradores?.[index]?.colaboradorId?.message
+                      }
+                    />
+                  </div>
+                  {fields.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => remove(index)}
+                      className="text-muted-foreground hover:text-destructive shrink-0"
+                      aria-label="Remover colaborador"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <Button
         type="submit"
-        disabled={isSubmitting}
+        disabled={isSubmitting || (isColaboradorLimited && !colaboradorLogado)}
         className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-base shadow-lg shadow-primary/20 transition-all"
       >
         {isSubmitting ? 'Salvando...' : 'Salvar Treinamento'}
