@@ -579,7 +579,14 @@ export default function HistoricoPage() {
         .eq('tenant_id', activeTenantId)
         .eq('email', userEmail)
         .single()
-      if (colError || !colData) {
+      if (colError) {
+        if (colError.code === 'PGRST116') {
+          setTreinamentos([])
+          return
+        }
+        throw colError
+      }
+      if (!colData) {
         setTreinamentos([])
         return
       }

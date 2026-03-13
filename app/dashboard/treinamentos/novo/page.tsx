@@ -610,6 +610,20 @@ function ColaboradorForm({
           .insert(inserts)
 
         if (err2) throw err2
+
+        try {
+          await fetch('/api/notificacoes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              treinamentoNome: data.nome,
+              tenantId,
+              colaboradorIds,
+            }),
+          })
+        } catch (e) {
+          console.warn('Falha ao disparar notificações:', e)
+        }
       }
       onSuccess()
     } catch (error) {

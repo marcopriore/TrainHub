@@ -131,7 +131,7 @@ export default function RelatoriosPage() {
 
         const { data: trData, error: trErr } = await query.order('data_treinamento', { ascending: true })
         if (trErr) throw trErr
-        setTreinamentos((trData as Treinamento[]) ?? [])
+        setTreinamentos((trData as unknown as Treinamento[]) ?? [])
 
         const { data: tcRes, error: tcErr } = await supabase
           .from('treinamento_colaboradores')
@@ -143,8 +143,8 @@ export default function RelatoriosPage() {
           `)
         if (tcErr) throw tcErr
 
-        const tcList = (tcRes as TreinamentoColaboradorRow[]) ?? []
-        const trIds = new Set((trData as Treinamento[])?.map((t) => t.id) ?? [])
+        const tcList = (tcRes as unknown as TreinamentoColaboradorRow[]) ?? []
+        const trIds = new Set((trData as unknown as Treinamento[])?.map((t) => t.id) ?? [])
         const filtered = tcList.filter((tc) => trIds.has(tc.treinamento_id))
         setTcData(filtered)
         return
@@ -193,9 +193,9 @@ export default function RelatoriosPage() {
       }
       const { data: trData, error: trErr } = await query.order('data_treinamento', { ascending: true })
       if (trErr) throw trErr
-      setTreinamentos((trData as Treinamento[]) ?? [])
+      setTreinamentos((trData as unknown as Treinamento[]) ?? [])
 
-      const trIds = new Set((trData as Treinamento[])?.map((t) => t.id) ?? [])
+      const trIds = new Set((trData as unknown as Treinamento[])?.map((t) => t.id) ?? [])
       const { data: tcRes, error: tcErr } = await supabase
         .from('treinamento_colaboradores')
         .select(`
@@ -207,7 +207,7 @@ export default function RelatoriosPage() {
         .eq('colaborador_id', colaboradorId)
         .in('treinamento_id', Array.from(trIds))
       if (tcErr) throw tcErr
-      setTcData((tcRes as TreinamentoColaboradorRow[]) ?? [])
+      setTcData((tcRes as unknown as TreinamentoColaboradorRow[]) ?? [])
     } catch (error) {
       console.error('Erro ao carregar relatórios:', error)
       toast.error('Não foi possível carregar os dados. Tente novamente.')

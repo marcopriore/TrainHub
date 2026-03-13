@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TenantSelector } from '@/components/tenant-selector'
+import { NotificacoesSino } from '@/components/notificacoes-sino'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 const mainNavItems: Array<{
@@ -89,7 +90,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       <TenantSelector />
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 overflow-y-auto" aria-label="Menu principal">
+      <nav className="flex-1 min-h-0 px-3 py-4 overflow-y-hidden hover:overflow-y-auto" aria-label="Menu principal">
         <ul className="flex flex-col gap-1">
           {mainNavItems.map(({ href, label, icon: Icon, permission, dashboardOnly, trilhasOnly, registrarAny }) => {
             if (dashboardOnly) {
@@ -188,7 +189,11 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 
       {/* User + Logout */}
       <div className="px-3 py-4 border-t border-sidebar-border">
-        <div className="flex items-center gap-3 px-3 py-2 mb-1">
+        <Link
+          href="/dashboard/perfil"
+          onClick={onClose}
+          className="flex items-center gap-3 px-3 py-2 mb-1 hover:bg-sidebar-accent/40 rounded-lg cursor-pointer transition-all duration-200"
+        >
           <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
             <span className="text-xs font-semibold text-primary">{initials}</span>
           </div>
@@ -200,7 +205,8 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
               {user?.email ?? '—'}
             </p>
           </div>
-        </div>
+        </Link>
+        <NotificacoesSino />
         <button
           type="button"
           onClick={async () => {
@@ -223,7 +229,7 @@ export function Sidebar({ isMobileOpen, onClose }: SidebarProps) {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex flex-col w-64 min-h-screen sticky top-0 flex-shrink-0 pointer-events-auto">
+      <aside className="hidden lg:flex flex-col w-64 h-screen sticky top-0 flex-shrink-0 pointer-events-auto">
         <SidebarContent />
       </aside>
 

@@ -136,7 +136,7 @@ function processarDados(treinamentos: TreinamentoRow[]) {
 }
 
 export default function DashboardPage() {
-  const { getActiveTenantId } = useUser()
+  const { user, getActiveTenantId } = useUser()
   const activeTenantId = getActiveTenantId()
   const [loading, setLoading] = useState(true)
   const [kpiData, setKpiData] = useState<KpiData | null>(null)
@@ -159,10 +159,80 @@ export default function DashboardPage() {
     const fetchData = async (silent = false) => {
       if (!silent) setLoading(true)
       try {
+        if (user?.isMaster?.() || user?.isAdmin?.()) {
+          const { data, error } = await supabase
+            .from('treinamentos')
+            .select('id, tipo, nome, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, criado_em, empresas_parceiras(nome)')
+            .eq('tenant_id', activeTenantId)
+            .order('criado_em', { ascending: false })
+
+          if (error) throw error
+
+          const rows = (data ?? []) as unknown as TreinamentoRow[]
+          const { kpiData: kpi, barData: bar, donutData: donut, recentes: rec } =
+            processarDados(rows)
+
+          setKpiData(kpi)
+          setBarData(bar)
+          setDonutData(donut)
+          setRecentes(rec)
+          return
+        }
+
+        const userEmail = user?.email
+        if (!userEmail) {
+          setKpiData(null)
+          setBarData([])
+          setDonutData([])
+          setRecentes([])
+          return
+        }
+
+        const { data: colData, error: colErr } = await supabase
+          .from('colaboradores')
+          .select('id')
+          .eq('tenant_id', activeTenantId)
+          .eq('email', userEmail)
+          .single()
+
+        if (colErr) {
+          if (colErr.code === 'PGRST116') {
+            setKpiData(null)
+            setBarData([])
+            setDonutData([])
+            setRecentes([])
+            return
+          }
+          throw colErr
+        }
+        if (!colData) {
+          setKpiData(null)
+          setBarData([])
+          setDonutData([])
+          setRecentes([])
+          return
+        }
+
+        const colaboradorId = (colData as { id: string }).id
+        const { data: tcData, error: tcErr } = await supabase
+          .from('treinamento_colaboradores')
+          .select('treinamento_id')
+          .eq('colaborador_id', colaboradorId)
+
+        if (tcErr) throw tcErr
+        const ids = (tcData ?? []).map((r: { treinamento_id: string }) => r.treinamento_id)
+        if (ids.length === 0) {
+          setKpiData(null)
+          setBarData([])
+          setDonutData([])
+          setRecentes([])
+          return
+        }
+
         const { data, error } = await supabase
           .from('treinamentos')
           .select('id, tipo, nome, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, criado_em, empresas_parceiras(nome)')
-          .eq('tenant_id', activeTenantId)
+          .in('id', ids)
           .order('criado_em', { ascending: false })
 
         if (error) throw error
@@ -220,7 +290,7 @@ export default function DashboardPage() {
       if (pollId) clearInterval(pollId)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [activeTenantId])
+  }, [activeTenantId, user?.id])
 
   return (
     <div className="flex flex-col gap-6">
