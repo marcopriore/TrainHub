@@ -166,7 +166,7 @@ export default function TenantEditPage() {
 
   useEffect(() => {
     if (!userLoading && (!user || !user.isMaster())) {
-      router.push('/dashboard')
+      router.push('/dashboard/gestao')
       return
     }
   }, [user, userLoading, router])
@@ -185,7 +185,7 @@ export default function TenantEditPage() {
 
         if (tenantErr || !tenantData) {
           toast.error('Tenant não encontrado')
-          router.replace('/dashboard/configuracoes/tenants')
+          router.replace('/dashboard/gestao/configuracoes/tenants')
           return
         }
 
@@ -598,7 +598,7 @@ export default function TenantEditPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
-            <Link href="/dashboard/configuracoes/tenants" aria-label="Voltar">
+            <Link href="/dashboard/gestao/configuracoes/tenants" aria-label="Voltar">
               <ArrowLeft className="w-4 h-4" />
             </Link>
           </Button>

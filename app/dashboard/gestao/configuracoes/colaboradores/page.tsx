@@ -80,7 +80,7 @@ export default function ColaboradoresPage() {
 
   useEffect(() => {
     if (user && !canManage) {
-      router.replace('/dashboard')
+      router.replace('/dashboard/gestao')
     }
   }, [user, canManage, router])
 

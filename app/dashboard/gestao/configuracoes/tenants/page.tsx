@@ -93,7 +93,7 @@ export default function TenantsPage() {
 
   useEffect(() => {
     if (!userLoading && (!user || !user.isMaster())) {
-      router.push('/dashboard')
+      router.push('/dashboard/gestao')
     }
   }, [user, userLoading, router])
 
@@ -290,7 +290,7 @@ export default function TenantsPage() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Button variant="ghost" size="icon-sm" asChild aria-label="Editar tenant">
-                        <Link href={`/dashboard/configuracoes/tenants/${tenant.id}`}>
+                        <Link href={`/dashboard/gestao/configuracoes/tenants/${tenant.id}`}>
                           <Pencil className="w-4 h-4" />
                         </Link>
                       </Button>

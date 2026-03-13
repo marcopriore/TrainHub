@@ -25,7 +25,11 @@ interface Notificacao {
   lida: boolean
 }
 
-export function NotificacoesSino() {
+type NotificacoesSinoVariant = 'sidebar' | 'compact'
+
+export function NotificacoesSino({
+  variant = 'sidebar',
+}: { variant?: NotificacoesSinoVariant } = {}) {
   const { user } = useUser()
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
   const [loading, setLoading] = useState(true)
@@ -136,7 +140,13 @@ export function NotificacoesSino() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground transition-all duration-200 cursor-pointer"
+          aria-label="Notificações"
+          className={cn(
+            'flex items-center rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground transition-all duration-200 cursor-pointer',
+            variant === 'sidebar'
+              ? 'gap-3 w-full px-3 py-2.5'
+              : 'p-2 shrink-0'
+          )}
         >
           <div className="relative flex-shrink-0">
             <Bell className="w-4.5 h-4.5" />
@@ -146,7 +156,9 @@ export function NotificacoesSino() {
               </span>
             )}
           </div>
-          <span className="flex-1 text-left">Notificações</span>
+          {variant === 'sidebar' && (
+            <span className="flex-1 text-left">Notificações</span>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent

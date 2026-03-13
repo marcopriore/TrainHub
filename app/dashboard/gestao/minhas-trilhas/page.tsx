@@ -60,7 +60,7 @@ export default function MinhasTrilhasPage() {
 
   useEffect(() => {
     if (!user || (!canView && !isAdminOrMaster)) {
-      router.replace('/dashboard')
+      router.replace('/dashboard/gestao')
       return
     }
   }, [user, canView, isAdminOrMaster, router])

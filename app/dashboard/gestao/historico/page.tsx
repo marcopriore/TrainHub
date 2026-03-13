@@ -545,7 +545,7 @@ export default function HistoricoPage() {
   const supabase = createClient()
 
   useEffect(() => {
-    if (user && !canView) router.replace('/dashboard')
+    if (user && !canView) router.replace('/dashboard/gestao')
   }, [user, canView, router])
 
   const fetchTreinamentos = async (silent = false) => {

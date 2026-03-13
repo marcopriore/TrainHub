@@ -115,7 +115,7 @@ export default function NovoTreinamentoPage() {
 
   useEffect(() => {
     if (user && !canRegistrar) {
-      router.replace('/dashboard')
+      router.replace('/dashboard/gestao')
       return
     }
   }, [user, canRegistrar, router])
@@ -253,7 +253,7 @@ export default function NovoTreinamentoPage() {
             tenantId={activeTenantId}
             onSuccess={() => {
               toast.success('Treinamento salvo com sucesso.')
-              router.push('/dashboard/treinamentos')
+              router.push('/dashboard/gestao/historico')
             }}
           />
         </TabsContent>
@@ -270,7 +270,7 @@ export default function NovoTreinamentoPage() {
             colaboradorLogado={colaboradorLogado}
             onSuccess={() => {
               toast.success('Treinamento salvo com sucesso.')
-              router.push('/dashboard/treinamentos')
+              router.push('/dashboard/gestao/historico')
             }}
           />
         </TabsContent>
@@ -343,7 +343,7 @@ export default function NovoTreinamentoPage() {
         }}
         onSuccess={() => {
           toast.success('Treinamentos importados com sucesso.')
-          router.push('/dashboard/treinamentos')
+          router.push('/dashboard/gestao/historico')
         }}
       />
     </div>

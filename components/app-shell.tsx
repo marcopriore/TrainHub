@@ -18,6 +18,7 @@ import {
   Briefcase,
   Users,
   ChevronDown,
+  ChevronLeft,
   Shield,
   BookOpen,
 } from 'lucide-react'
@@ -35,19 +36,19 @@ const mainNavItems: Array<{
   trilhasOnly?: boolean
   registrarAny?: boolean
 }> = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'ver_dashboard_geral', dashboardOnly: true },
-  { href: '/dashboard/minhas-trilhas', label: 'Minhas Trilhas', icon: BookOpen, permission: 'ver_minhas_trilhas', trilhasOnly: true },
-  { href: '/dashboard/treinamentos/novo', label: 'Registrar Treinamento', icon: PlusCircle, permission: null, registrarAny: true },
-  { href: '/dashboard/historico', label: 'Histórico de Treinamentos', icon: List, permission: null },
-  { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart2, permission: null },
+  { href: '/dashboard/gestao', label: 'Dashboard', icon: LayoutDashboard, permission: 'ver_dashboard_geral', dashboardOnly: true },
+  { href: '/dashboard/gestao/minhas-trilhas', label: 'Minhas Trilhas', icon: BookOpen, permission: 'ver_minhas_trilhas', trilhasOnly: true },
+  { href: '/dashboard/gestao/treinamentos/novo', label: 'Registrar Treinamento', icon: PlusCircle, permission: null, registrarAny: true },
+  { href: '/dashboard/gestao/historico', label: 'Histórico de Treinamentos', icon: List, permission: null },
+  { href: '/dashboard/gestao/relatorios', label: 'Relatórios', icon: BarChart2, permission: null },
 ]
 
 const configNavItems = [
-  { href: '/dashboard/configuracoes/setores', label: 'Setores', icon: Building2, permission: 'gerenciar_setores', masterOnly: false },
-  { href: '/dashboard/configuracoes/empresas-parceiras', label: 'Empresas Parceiras', icon: Briefcase, permission: 'gerenciar_empresas_parceiras', masterOnly: false },
-  { href: '/dashboard/configuracoes/colaboradores', label: 'Colaboradores', icon: Users, permission: 'gerenciar_colaboradores', masterOnly: false },
-  { href: '/dashboard/configuracoes/perfis', label: 'Perfil de Acesso', icon: Shield, permission: null, masterOnly: true },
-  { href: '/dashboard/configuracoes/tenants', label: 'Tenants', icon: Building2, permission: null, masterOnly: true },
+  { href: '/dashboard/gestao/configuracoes/setores', label: 'Setores', icon: Building2, permission: 'gerenciar_setores', masterOnly: false },
+  { href: '/dashboard/gestao/configuracoes/empresas-parceiras', label: 'Empresas Parceiras', icon: Briefcase, permission: 'gerenciar_empresas_parceiras', masterOnly: false },
+  { href: '/dashboard/gestao/configuracoes/colaboradores', label: 'Colaboradores', icon: Users, permission: 'gerenciar_colaboradores', masterOnly: false },
+  { href: '/dashboard/gestao/configuracoes/perfis', label: 'Perfil de Acesso', icon: Shield, permission: null, masterOnly: true },
+  { href: '/dashboard/gestao/configuracoes/tenants', label: 'Tenants', icon: Building2, permission: null, masterOnly: true },
 ]
 
 interface SidebarProps {
@@ -86,6 +87,15 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
           </button>
         )}
       </div>
+
+      <Link
+        href="/dashboard"
+        onClick={onClose}
+        className="flex items-center gap-2 px-6 py-2.5 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80 transition-colors duration-200 border-b border-sidebar-border"
+      >
+        <ChevronLeft className="w-3.5 h-3.5" />
+        Voltar aos Módulos
+      </Link>
 
       <TenantSelector />
 
@@ -134,7 +144,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 
           <li className="pt-2 mt-2 border-t border-sidebar-border/50">
             <Collapsible
-              defaultOpen={pathname.startsWith('/dashboard/configuracoes')}
+              defaultOpen={pathname.startsWith('/dashboard/gestao/configuracoes')}
               className="group/collapsible"
             >
               <CollapsibleTrigger

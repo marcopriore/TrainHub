@@ -219,7 +219,7 @@ export default function RelatoriosPage() {
   }
 
   useEffect(() => {
-    if (user && !canView) router.replace('/dashboard')
+    if (user && !canView) router.replace('/dashboard/gestao')
   }, [user, canView, router])
 
   useEffect(() => {

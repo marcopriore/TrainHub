@@ -1,322 +1,223 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import dynamic from 'next/dynamic'
-import { toast } from 'sonner'
-import { createClient } from '@/lib/supabase'
-import { useUser } from '@/lib/use-user'
-import { KpiCards, type KpiData } from '@/components/dashboard/kpi-cards'
+import Link from 'next/link'
 import {
-  RecentActivityTable,
-  type RecentActivityItem,
-} from '@/components/dashboard/recent-activity'
-import type { MonthlyBarData, DonutDataItem } from '@/components/dashboard/charts'
+  GraduationCap,
+  LogOut,
+  ClipboardList,
+  BookOpen,
+  Library,
+  Award,
+  Lock,
+  ChevronRight,
+} from 'lucide-react'
+import { useUser } from '@/lib/use-user'
+import { NotificacoesSino } from '@/components/notificacoes-sino'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 
-const TrainingBarChart = dynamic(
-  () => import('@/components/dashboard/charts').then((m) => ({ default: m.TrainingBarChart })),
-  { ssr: false, loading: () => <ChartSkeleton title="Horas de Treinamento por Mês" /> }
-)
+const COR_GESTAO = '#00C9A7'
+const COR_TRILHAS = '#3b82f6'
+const COR_CATALOGO = '#8b5cf6'
+const COR_AVALIACOES = '#f59e0b'
 
-const TrainingDonutChart = dynamic(
-  () => import('@/components/dashboard/charts').then((m) => ({ default: m.TrainingDonutChart })),
-  { ssr: false, loading: () => <ChartSkeleton title="Treinamentos por Tipo" /> }
-)
+export default function ModulosPage() {
+  const { user, loading } = useUser()
 
-function ChartSkeleton({ title }: { title: string }) {
-  return (
-    <div className="bg-card rounded-xl border border-border p-5 shadow-sm">
-      <h3 className="font-serif text-base font-semibold text-foreground mb-4">{title}</h3>
-      <div className="h-[260px] w-full rounded-lg bg-muted animate-pulse" />
-    </div>
-  )
-}
+  const initials = user?.nome
+    ? user.nome
+        .split(/\s+/)
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
+    : '—'
 
-interface TreinamentoRow {
-  id: string
-  tipo: string
-  nome: string
-  carga_horaria: number
-  data_treinamento: string
-  indice_satisfacao: number | null
-  indice_aprovacao: number | null
-  criado_em: string
-  empresas_parceiras: { nome: string } | null
-}
-
-const MESES_PT = [
-  'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
-  'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
-]
-
-function getUltimos6Meses() {
-  const hoje = new Date()
-  const meses: { mes: string; mesNum: number; ano: number; key: string }[] = []
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
-    meses.push({
-      mes: `${MESES_PT[d.getMonth()]}`,
-      mesNum: d.getMonth(),
-      ano: d.getFullYear(),
-      key: `${d.getFullYear()}-${d.getMonth()}`,
-    })
-  }
-  return meses
-}
-
-function processarDados(treinamentos: TreinamentoRow[]) {
-  const totalHorasParceiros = treinamentos
-    .filter((t) => t.tipo === 'parceiro')
-    .reduce((acc, t) => acc + (t.carga_horaria ?? 0), 0)
-
-  const totalHorasColaboradores = treinamentos
-    .filter((t) => t.tipo === 'colaborador')
-    .reduce((acc, t) => acc + (t.carga_horaria ?? 0), 0)
-
-  const comSatisfacao = treinamentos.filter(
-    (t) => t.indice_satisfacao != null && t.indice_satisfacao > 0
-  )
-  const indiceSatisfacao =
-    comSatisfacao.length > 0
-      ? comSatisfacao.reduce((a, t) => a + (t.indice_satisfacao ?? 0), 0) /
-        comSatisfacao.length
-      : null
-
-  const comAprovacao = treinamentos.filter(
-    (t) => t.indice_aprovacao != null && t.indice_aprovacao > 0
-  )
-  const indiceAprovacao =
-    comAprovacao.length > 0
-      ? comAprovacao.reduce((a, t) => a + (t.indice_aprovacao ?? 0), 0) /
-        comAprovacao.length
-      : null
-
-  const kpiData: KpiData = {
-    totalHorasParceiros,
-    totalHorasColaboradores,
-    indiceSatisfacao: indiceSatisfacao != null ? Number(indiceSatisfacao.toFixed(1)) : null,
-    indiceAprovacao: indiceAprovacao != null ? Number(indiceAprovacao.toFixed(1)) : null,
+  if (loading || !user) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="h-16 bg-sidebar" />
+        <div className="max-w-5xl mx-auto px-6 py-12">
+          <Skeleton className="h-9 w-64 mb-2" />
+          <Skeleton className="h-5 w-80 mb-10" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-52 rounded-2xl" />
+            ))}
+          </div>
+        </div>
+      </div>
+    )
   }
 
-  const ultimos6Meses = getUltimos6Meses()
-  const barData: MonthlyBarData[] = ultimos6Meses.map(({ mes, mesNum, ano }) => {
-    const doMes = treinamentos.filter((t) => {
-      const d = new Date(t.data_treinamento)
-      return d.getMonth() === mesNum && d.getFullYear() === ano
-    })
-    const parceiro = doMes
-      .filter((t) => t.tipo === 'parceiro')
-      .reduce((a, t) => a + (t.carga_horaria ?? 0), 0)
-    const colaborador = doMes
-      .filter((t) => t.tipo === 'colaborador')
-      .reduce((a, t) => a + (t.carga_horaria ?? 0), 0)
-    return { mes, Parceiro: parceiro, Colaborador: colaborador }
-  })
-
-  const countParceiro = treinamentos.filter((t) => t.tipo === 'parceiro').length
-  const countColaborador = treinamentos.filter((t) => t.tipo === 'colaborador').length
-  const donutData: DonutDataItem[] = []
-  if (countParceiro > 0) donutData.push({ name: 'Parceiro', value: countParceiro })
-  if (countColaborador > 0)
-    donutData.push({ name: 'Colaborador', value: countColaborador })
-
-  const recentes: RecentActivityItem[] = treinamentos
-    .slice(0, 5)
-    .map((t) => ({
-      id: t.id,
-      tipo: t.tipo,
-      nome: t.nome,
-      empresa: t.empresas_parceiras?.nome ?? '—',
-      cargaHoraria: t.carga_horaria ?? 0,
-      data: t.data_treinamento,
-      indiceSatisfacao: t.indice_satisfacao,
-      indiceAprovacao: t.indice_aprovacao,
-    }))
-
-  return { kpiData, barData, donutData, recentes }
-}
-
-export default function DashboardPage() {
-  const { user, getActiveTenantId } = useUser()
-  const activeTenantId = getActiveTenantId()
-  const [loading, setLoading] = useState(true)
-  const [kpiData, setKpiData] = useState<KpiData | null>(null)
-  const [barData, setBarData] = useState<MonthlyBarData[]>([])
-  const [donutData, setDonutData] = useState<DonutDataItem[]>([])
-  const [recentes, setRecentes] = useState<RecentActivityItem[]>([])
-
-  useEffect(() => {
-    if (!activeTenantId) {
-      setKpiData(null)
-      setBarData([])
-      setDonutData([])
-      setRecentes([])
-      setLoading(false)
-      return
-    }
-
-    const supabase = createClient()
-
-    const fetchData = async (silent = false) => {
-      if (!silent) setLoading(true)
-      try {
-        if (user?.isMaster?.() || user?.isAdmin?.()) {
-          const { data, error } = await supabase
-            .from('treinamentos')
-            .select('id, tipo, nome, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, criado_em, empresas_parceiras(nome)')
-            .eq('tenant_id', activeTenantId)
-            .order('criado_em', { ascending: false })
-
-          if (error) throw error
-
-          const rows = (data ?? []) as unknown as TreinamentoRow[]
-          const { kpiData: kpi, barData: bar, donutData: donut, recentes: rec } =
-            processarDados(rows)
-
-          setKpiData(kpi)
-          setBarData(bar)
-          setDonutData(donut)
-          setRecentes(rec)
-          return
-        }
-
-        const userEmail = user?.email
-        if (!userEmail) {
-          setKpiData(null)
-          setBarData([])
-          setDonutData([])
-          setRecentes([])
-          return
-        }
-
-        const { data: colData, error: colErr } = await supabase
-          .from('colaboradores')
-          .select('id')
-          .eq('tenant_id', activeTenantId)
-          .eq('email', userEmail)
-          .single()
-
-        if (colErr) {
-          if (colErr.code === 'PGRST116') {
-            setKpiData(null)
-            setBarData([])
-            setDonutData([])
-            setRecentes([])
-            return
-          }
-          throw colErr
-        }
-        if (!colData) {
-          setKpiData(null)
-          setBarData([])
-          setDonutData([])
-          setRecentes([])
-          return
-        }
-
-        const colaboradorId = (colData as { id: string }).id
-        const { data: tcData, error: tcErr } = await supabase
-          .from('treinamento_colaboradores')
-          .select('treinamento_id')
-          .eq('colaborador_id', colaboradorId)
-
-        if (tcErr) throw tcErr
-        const ids = (tcData ?? []).map((r: { treinamento_id: string }) => r.treinamento_id)
-        if (ids.length === 0) {
-          setKpiData(null)
-          setBarData([])
-          setDonutData([])
-          setRecentes([])
-          return
-        }
-
-        const { data, error } = await supabase
-          .from('treinamentos')
-          .select('id, tipo, nome, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, criado_em, empresas_parceiras(nome)')
-          .in('id', ids)
-          .order('criado_em', { ascending: false })
-
-        if (error) throw error
-
-        const rows = (data ?? []) as unknown as TreinamentoRow[]
-        const { kpiData: kpi, barData: bar, donutData: donut, recentes: rec } =
-          processarDados(rows)
-
-        setKpiData(kpi)
-        setBarData(bar)
-        setDonutData(donut)
-        setRecentes(rec)
-      } catch (error) {
-        console.error('Erro ao carregar dados do dashboard:', error)
-        toast.error('Não foi possível carregar os dados. Tente novamente.')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    let pollId: ReturnType<typeof setInterval> | null = null
-    let channel: ReturnType<typeof supabase.channel> | null = null
-
-    const setupRealtime = () => {
-      channel = supabase
-        .channel('treinamentos-dashboard')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'treinamentos',
-            filter: `tenant_id=eq.${activeTenantId}`,
-          },
-          () => fetchData(true)
-        )
-        .subscribe()
-
-      pollId = setInterval(() => {
-        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-          fetchData(true)
-        }
-      }, 15_000)
-    }
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') fetchData(true)
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange)
-
-    fetchData().then(setupRealtime)
-
-    return () => {
-      if (channel) supabase.removeChannel(channel)
-      if (pollId) clearInterval(pollId)
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-    }
-  }, [activeTenantId, user?.id])
-
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-serif text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Visão geral dos treinamentos —{' '}
-          {new Date().toLocaleDateString('pt-BR', {
-            month: 'long',
-            year: 'numeric',
-          })}
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="h-16 bg-sidebar flex items-center justify-between px-8 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0 shadow-md shadow-primary/30">
+            <GraduationCap className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <span className="font-serif text-xl font-bold text-white tracking-tight">
+            TrainHub
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard/perfil"
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-sidebar-accent/40 transition-colors"
+          >
+            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-semibold text-primary">{initials}</span>
+            </div>
+          </Link>
+          <NotificacoesSino variant="compact" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40"
+            onClick={async () => {
+              const { createClient } = await import('@/lib/supabase')
+              const supabase = createClient()
+              await supabase.auth.signOut()
+              window.location.href = '/login'
+            }}
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Sair
+          </Button>
+        </div>
+      </header>
+
+      {/* Content */}
+      <main className="max-w-5xl mx-auto px-6 py-12">
+        <h1 className="font-serif text-3xl font-bold text-foreground">
+          Olá, {user.nome ?? 'Usuário'}!
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          Selecione um módulo para começar
         </p>
-      </div>
 
-      <KpiCards data={kpiData} loading={loading} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-10">
+          {/* Card 1 — Gestão de Treinamentos */}
+          <Link
+            href="/dashboard/gestao"
+            className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 hover:shadow-md hover:border-[#00C9A7]/40 transition-all duration-200 cursor-pointer group"
+          >
+            <div className="flex justify-between items-start">
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: `${COR_GESTAO}1a`, color: COR_GESTAO }}
+              >
+                <ClipboardList className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400">
+                Ativo
+              </span>
+            </div>
+            <div>
+              <h2 className="font-semibold text-lg text-foreground">
+                Gestão de Treinamentos
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Registre, acompanhe e analise todos os treinamentos corporativos
+              </p>
+            </div>
+            <div className="flex items-center gap-1 text-sm font-medium" style={{ color: COR_GESTAO }}>
+              <span>Acessar</span>
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </Link>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <TrainingBarChart data={barData} loading={loading} />
+          {/* Card 2 — Trilhas de Conhecimento */}
+          <Link
+            href="/dashboard/gestao/minhas-trilhas"
+            className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 hover:shadow-md hover:border-[#3b82f6]/40 transition-all duration-200 cursor-pointer group"
+          >
+            <div className="flex justify-between items-start">
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: `${COR_TRILHAS}1a`, color: COR_TRILHAS }}
+              >
+                <BookOpen className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400">
+                Ativo
+              </span>
+            </div>
+            <div>
+              <h2 className="font-semibold text-lg text-foreground">
+                Trilhas de Conhecimento
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Acompanhe sua jornada de aprendizado e evolução profissional
+              </p>
+            </div>
+            <div className="flex items-center gap-1 text-sm font-medium" style={{ color: COR_TRILHAS }}>
+              <span>Acessar</span>
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </Link>
+
+          {/* Card 3 — Catálogo de Treinamentos */}
+          <div
+            className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 opacity-60 cursor-not-allowed"
+          >
+            <div className="flex justify-between items-start">
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: `${COR_CATALOGO}1a`, color: COR_CATALOGO }}
+              >
+                <Library className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                Em breve
+              </span>
+            </div>
+            <div>
+              <h2 className="font-semibold text-lg text-foreground">
+                Catálogo de Treinamentos
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Explore o catálogo completo de treinamentos disponíveis
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Lock className="w-4 h-4" />
+              <span>Em breve</span>
+            </div>
+          </div>
+
+          {/* Card 4 — Avaliações e Certificados */}
+          <div
+            className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 opacity-60 cursor-not-allowed"
+          >
+            <div className="flex justify-between items-start">
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: `${COR_AVALIACOES}1a`, color: COR_AVALIACOES }}
+              >
+                <Award className="w-6 h-6" />
+              </div>
+              <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                Em breve
+              </span>
+            </div>
+            <div>
+              <h2 className="font-semibold text-lg text-foreground">
+                Avaliações e Certificados
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Realize avaliações e obtenha certificados de conclusão
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Lock className="w-4 h-4" />
+              <span>Em breve</span>
+            </div>
+          </div>
         </div>
-        <div className="lg:col-span-1">
-          <TrainingDonutChart data={donutData} loading={loading} />
-        </div>
-      </div>
-
-      <RecentActivityTable data={recentes} loading={loading} />
+      </main>
     </div>
   )
 }

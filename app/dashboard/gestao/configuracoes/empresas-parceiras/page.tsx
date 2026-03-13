@@ -59,7 +59,7 @@ export default function EmpresasParceirasPage() {
   const supabase = createClient()
 
   useEffect(() => {
-    if (user && !canManage) router.replace('/dashboard')
+    if (user && !canManage) router.replace('/dashboard/gestao')
   }, [user, canManage, router])
 
   const fetchEmpresas = async () => {
