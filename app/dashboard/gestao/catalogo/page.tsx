@@ -27,11 +27,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -117,8 +117,20 @@ export default function CatalogoPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [itemToDelete, setItemToDelete] = useState<CatalogoItem | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [categorias, setCategorias] = useState<{ id: string; nome: string }[]>([])
 
   const supabase = createClient()
+
+  const fetchCategorias = async () => {
+    if (!activeTenantId) return
+    const supabase = createClient()
+    const { data } = await supabase
+      .from('categorias')
+      .select('id, nome')
+      .eq('tenant_id', activeTenantId)
+      .order('nome', { ascending: true })
+    setCategorias(data ?? [])
+  }
 
   const {
     register,
@@ -176,6 +188,7 @@ export default function CatalogoPage() {
   useEffect(() => {
     if (!activeTenantId || !user) return
     fetchCatalogo()
+    fetchCategorias()
   }, [activeTenantId, user?.id])
 
   useEffect(() => {
@@ -561,15 +574,15 @@ export default function CatalogoPage() {
         )}
       </div>
 
-      {/* Sheet Criar/Editar */}
-      <Sheet open={sheetOpen} onOpenChange={(open) => !open && closeSheet()}>
-        <SheetContent side="right" className="flex flex-col p-0 sm:max-w-xl overflow-y-auto">
-          <div className="flex flex-col gap-6 p-6 pr-12">
-            <SheetHeader className="p-0">
-              <SheetTitle className="font-serif text-2xl font-bold">
-                {editingItem ? 'Editar Treinamento' : 'Novo Treinamento'}
-              </SheetTitle>
-            </SheetHeader>
+      {/* Dialog Criar/Editar */}
+      <Dialog open={sheetOpen} onOpenChange={(open) => !open && closeSheet()}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-2xl font-bold">
+              {editingItem ? 'Editar Treinamento' : 'Novo Treinamento'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-6 pt-2">
             <form onSubmit={handleSubmit(onSave)} className="flex flex-col gap-4">
               <div className="space-y-2">
                 <Label htmlFor="titulo">Título *</Label>
@@ -621,10 +634,23 @@ export default function CatalogoPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="categoria">Categoria</Label>
-                <Input
-                  id="categoria"
-                  placeholder="Ex.: Tecnologia, Gestão"
-                  {...register('categoria')}
+                <Controller
+                  control={control}
+                  name="categoria"
+                  render={({ field }) => (
+                    <Select value={field.value ?? ''} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a categoria" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categorias.map((c) => (
+                          <SelectItem key={c.id} value={c.nome}>
+                            {c.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 />
               </div>
               <div className="space-y-2">
@@ -709,8 +735,8 @@ export default function CatalogoPage() {
               </div>
             </form>
           </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       {/* Alert Excluir */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

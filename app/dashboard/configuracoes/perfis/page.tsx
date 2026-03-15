@@ -112,6 +112,7 @@ const PERMISSOES_AGRUPADAS = [
         categoria: 'Catálogo',
         permissoes: [
           { key: 'gerenciar_catalogo' as const, label: 'Gerenciar Catálogo de Treinamentos' },
+          { key: 'gerenciar_categorias' as const, label: 'Gerenciar Categorias' },
         ],
       },
     ],

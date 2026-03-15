@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   BookOpen,
   Library,
+  Tag,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TenantSelector } from '@/components/tenant-selector'
@@ -47,7 +48,7 @@ const mainNavItems: Array<{
 const configNavItems = [
   { href: '/dashboard/gestao/configuracoes/setores', label: 'Setores', icon: Building2, permission: 'gerenciar_setores', masterOnly: false },
   { href: '/dashboard/gestao/configuracoes/empresas-parceiras', label: 'Empresas Parceiras', icon: Briefcase, permission: 'gerenciar_empresas_parceiras', masterOnly: false },
-  { href: '/dashboard/gestao/configuracoes/colaboradores', label: 'Colaboradores', icon: Users, permission: 'gerenciar_colaboradores', masterOnly: false },
+  { href: '/dashboard/gestao/configuracoes/categorias', label: 'Categorias', icon: Tag, permission: 'gerenciar_categorias', masterOnly: false },
 ]
 
 interface SidebarProps {
