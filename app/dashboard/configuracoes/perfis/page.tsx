@@ -108,6 +108,12 @@ const PERMISSOES_AGRUPADAS = [
         categoria: 'Dashboard',
         permissoes: [{ key: 'ver_dashboard_geral' as const, label: 'Ver Dashboard Geral' }],
       },
+      {
+        categoria: 'Catálogo',
+        permissoes: [
+          { key: 'gerenciar_catalogo' as const, label: 'Gerenciar Catálogo de Treinamentos' },
+        ],
+      },
     ],
   },
   {

@@ -1,0 +1,703 @@
+'use client'
+
+import { useEffect, useState, useMemo } from 'react'
+import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { useForm, Controller } from 'react-hook-form'
+import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase'
+import { useUser } from '@/lib/use-user'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { cn } from '@/lib/utils'
+
+interface CatalogoItem {
+  id: string
+  tenant_id: string
+  titulo: string
+  conteudo_programatico: string | null
+  objetivo: string | null
+  carga_horaria: number | null
+  categoria: string | null
+  nivel: string | null
+  modalidade: string | null
+  imagem_url: string | null
+  status: string
+  criado_em: string
+  atualizado_em: string
+  criado_por: string | null
+}
+
+const statusConfig: Record<string, { label: string; className: string }> = {
+  ativo: { label: 'Ativo', className: 'bg-green-500/10 text-green-600 dark:text-green-400' },
+  inativo: { label: 'Inativo', className: 'bg-muted text-muted-foreground' },
+  rascunho: { label: 'Rascunho', className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+}
+
+const nivelOptions = [
+  { value: 'basico', label: 'Básico' },
+  { value: 'intermediario', label: 'Intermediário' },
+  { value: 'avancado', label: 'Avançado' },
+]
+
+const modalidadeOptions = [
+  { value: 'presencial', label: 'Presencial' },
+  { value: 'online', label: 'Online' },
+  { value: 'hibrido', label: 'Híbrido' },
+]
+
+const statusOptions = [
+  { value: 'rascunho', label: 'Rascunho' },
+  { value: 'ativo', label: 'Ativo' },
+  { value: 'inativo', label: 'Inativo' },
+]
+
+type FormValues = {
+  titulo: string
+  conteudo_programatico: string
+  objetivo: string
+  carga_horaria: number
+  categoria: string
+  nivel: string
+  modalidade: string
+  status: string
+  imagem_url: string
+}
+
+export default function CatalogoPage() {
+  const { user, getActiveTenantId } = useUser()
+  const activeTenantId = getActiveTenantId()
+
+  const canManage =
+    user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('gerenciar_catalogo')
+
+  const [items, setItems] = useState<CatalogoItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filtroTitulo, setFiltroTitulo] = useState('')
+  const [filtroStatus, setFiltroStatus] = useState<string>('todos')
+  const [filtroCategoria, setFiltroCategoria] = useState<string>('todas')
+  const [filtroNivel, setFiltroNivel] = useState<string>('todos')
+  const [filtroModalidade, setFiltroModalidade] = useState<string>('todas')
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState<CatalogoItem | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [itemToDelete, setItemToDelete] = useState<CatalogoItem | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  const supabase = createClient()
+
+  const {
+    register,
+    control,
+    handleSubmit,
+    reset,
+    setError,
+    formState: { errors },
+  } = useForm<FormValues>({
+    defaultValues: {
+      titulo: '',
+      conteudo_programatico: '',
+      objetivo: '',
+      carga_horaria: 0,
+      categoria: '',
+      nivel: '',
+      modalidade: '',
+      status: 'rascunho',
+      imagem_url: '',
+    },
+  })
+
+  const categoriasDistintas = useMemo(() => {
+    const set = new Set<string>()
+    items.forEach((i) => {
+      if (i.categoria?.trim()) set.add(i.categoria.trim())
+    })
+    return Array.from(set).sort()
+  }, [items])
+
+  const fetchCatalogo = async (silent = false) => {
+    if (!activeTenantId) {
+      setItems([])
+      setLoading(false)
+      return
+    }
+    if (!silent) setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('catalogo_treinamentos')
+        .select('*')
+        .eq('tenant_id', activeTenantId)
+        .order('criado_em', { ascending: false })
+
+      if (error) throw error
+      setItems((data as CatalogoItem[]) ?? [])
+    } catch (error) {
+      console.error('Erro ao carregar catálogo:', error)
+      toast.error('Não foi possível carregar o catálogo. Tente novamente.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!activeTenantId || !user) return
+    fetchCatalogo()
+  }, [activeTenantId, user?.id])
+
+  useEffect(() => {
+    if (!activeTenantId) return
+
+    const channel = supabase
+      .channel('catalogo-treinamentos')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'catalogo_treinamentos',
+          filter: `tenant_id=eq.${activeTenantId}`,
+        },
+        () => fetchCatalogo(true)
+      )
+      .subscribe()
+
+    const pollId = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchCatalogo(true)
+      }
+    }, 15_000)
+
+    return () => {
+      supabase.removeChannel(channel)
+      clearInterval(pollId)
+    }
+  }, [activeTenantId])
+
+  const filtered = useMemo(() => {
+    return items.filter((item) => {
+      const matchTitulo =
+        !filtroTitulo.trim() ||
+        item.titulo?.toLowerCase().includes(filtroTitulo.trim().toLowerCase())
+      const matchStatus = filtroStatus === 'todos' || item.status === filtroStatus
+      const matchCategoria =
+        filtroCategoria === 'todas' || (item.categoria ?? '').trim() === filtroCategoria
+      const matchNivel = filtroNivel === 'todos' || item.nivel === filtroNivel
+      const matchModalidade =
+        filtroModalidade === 'todas' || item.modalidade === filtroModalidade
+      return matchTitulo && matchStatus && matchCategoria && matchNivel && matchModalidade
+    })
+  }, [items, filtroTitulo, filtroStatus, filtroCategoria, filtroNivel, filtroModalidade])
+
+  const openNewSheet = () => {
+    setEditingItem(null)
+    reset({
+      titulo: '',
+      conteudo_programatico: '',
+      objetivo: '',
+      carga_horaria: 0,
+      categoria: '',
+      nivel: '',
+      modalidade: '',
+      status: 'rascunho',
+      imagem_url: '',
+    })
+    setSheetOpen(true)
+  }
+
+  const openEditSheet = (item: CatalogoItem) => {
+    setEditingItem(item)
+    reset({
+      titulo: item.titulo ?? '',
+      conteudo_programatico: item.conteudo_programatico ?? '',
+      objetivo: item.objetivo ?? '',
+      carga_horaria: item.carga_horaria ?? 0,
+      categoria: item.categoria ?? '',
+      nivel: item.nivel ?? '',
+      modalidade: item.modalidade ?? '',
+      status: item.status ?? 'rascunho',
+      imagem_url: item.imagem_url ?? '',
+    })
+    setSheetOpen(true)
+  }
+
+  const closeSheet = () => {
+    setSheetOpen(false)
+    setEditingItem(null)
+  }
+
+  const onSave = async (values: FormValues) => {
+    const tituloTrimmed = values.titulo?.trim()
+    if (!tituloTrimmed) {
+      setError('titulo', { message: 'Informe o título' })
+      return
+    }
+    if (values.carga_horaria < 0) {
+      setError('carga_horaria', { message: 'Carga horária deve ser >= 0' })
+      return
+    }
+    if (!activeTenantId) {
+      toast.error('Tenant não identificado.')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const payload = {
+        titulo: tituloTrimmed,
+        conteudo_programatico: values.conteudo_programatico?.trim() || null,
+        objetivo: values.objetivo?.trim() || null,
+        carga_horaria: values.carga_horaria,
+        categoria: values.categoria?.trim() || null,
+        nivel: values.nivel || null,
+        modalidade: values.modalidade || null,
+        status: values.status || 'rascunho',
+        imagem_url: values.imagem_url?.trim() || null,
+        atualizado_em: new Date().toISOString(),
+      }
+
+      if (editingItem) {
+        const { error } = await supabase
+          .from('catalogo_treinamentos')
+          .update(payload)
+          .eq('id', editingItem.id)
+        if (error) throw error
+        toast.success('Treinamento atualizado com sucesso.')
+      } else {
+        const { error } = await supabase.from('catalogo_treinamentos').insert({
+          ...payload,
+          tenant_id: activeTenantId,
+          criado_por: user?.id ?? null,
+        })
+        if (error) throw error
+        toast.success('Treinamento cadastrado com sucesso.')
+      }
+      closeSheet()
+      fetchCatalogo()
+    } catch (error) {
+      console.error('Erro ao salvar:', error)
+      toast.error('Não foi possível salvar. Tente novamente.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const openDeleteDialog = (item: CatalogoItem) => {
+    setItemToDelete(item)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDelete = async () => {
+    if (!itemToDelete) return
+    setSubmitting(true)
+    try {
+      const { error } = await supabase
+        .from('catalogo_treinamentos')
+        .delete()
+        .eq('id', itemToDelete.id)
+      if (error) throw error
+      toast.success('Treinamento excluído com sucesso.')
+      setDeleteDialogOpen(false)
+      setItemToDelete(null)
+      fetchCatalogo()
+    } catch (error) {
+      console.error('Erro ao excluir:', error)
+      toast.error('Não foi possível excluir. Tente novamente.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleLimparFiltros = () => {
+    setFiltroTitulo('')
+    setFiltroStatus('todos')
+    setFiltroCategoria('todas')
+    setFiltroNivel('todos')
+    setFiltroModalidade('todas')
+  }
+
+  if (!activeTenantId) {
+    return (
+      <div className="flex flex-col gap-6">
+        <h1 className="font-serif text-2xl font-bold text-foreground">Treinamentos</h1>
+        <p className="text-muted-foreground text-sm">Selecione um tenant para continuar.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-serif text-2xl font-bold text-foreground">
+            Treinamentos
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            {loading ? '...' : filtered.length} treinamentos cadastrados
+          </p>
+        </div>
+        {canManage && (
+          <Button onClick={openNewSheet} className="w-full sm:w-auto shrink-0 bg-[#00C9A7] hover:bg-[#00C9A7]/90">
+            <Plus className="w-4 h-4" />
+            Novo Treinamento
+          </Button>
+        )}
+      </div>
+
+      {/* Filtros */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Input
+          placeholder="Buscar por título"
+          value={filtroTitulo}
+          onChange={(e) => setFiltroTitulo(e.target.value)}
+          className="w-[200px]"
+        />
+        <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos</SelectItem>
+            <SelectItem value="ativo">Ativo</SelectItem>
+            <SelectItem value="inativo">Inativo</SelectItem>
+            <SelectItem value="rascunho">Rascunho</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Categoria" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Todas</SelectItem>
+            {categoriasDistintas.map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filtroNivel} onValueChange={setFiltroNivel}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Nível" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos</SelectItem>
+            <SelectItem value="basico">Básico</SelectItem>
+            <SelectItem value="intermediario">Intermediário</SelectItem>
+            <SelectItem value="avancado">Avançado</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filtroModalidade} onValueChange={setFiltroModalidade}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Modalidade" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Todas</SelectItem>
+            <SelectItem value="presencial">Presencial</SelectItem>
+            <SelectItem value="online">Online</SelectItem>
+            <SelectItem value="hibrido">Híbrido</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" onClick={handleLimparFiltros}>
+          Limpar Filtros
+        </Button>
+      </div>
+
+      {/* Tabela */}
+      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="p-6 space-y-4">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+            <p className="text-muted-foreground text-sm">Nenhum treinamento encontrado.</p>
+            <p className="text-muted-foreground text-xs mt-1">
+              {canManage ? 'Clique em Novo Treinamento para cadastrar.' : ''}
+            </p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/30 hover:bg-muted/30">
+                <TableHead className="font-medium w-24">Status</TableHead>
+                <TableHead className="font-medium">Título</TableHead>
+                <TableHead className="font-medium">Categoria</TableHead>
+                <TableHead className="font-medium">Nível</TableHead>
+                <TableHead className="font-medium">Modalidade</TableHead>
+                <TableHead className="font-medium text-right w-28">C. Horária</TableHead>
+                {canManage && (
+                  <TableHead className="font-medium w-[140px] text-right">Ações</TableHead>
+                )}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((item) => {
+                const sc = statusConfig[item.status] ?? statusConfig.rascunho
+                return (
+                  <TableRow key={item.id}>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          'px-2 py-0.5 rounded-full text-xs font-medium',
+                          sc.className
+                        )}
+                      >
+                        {sc.label}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-medium max-w-52 truncate">{item.titulo}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {item.categoria ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground capitalize">
+                      {item.nivel ? nivelOptions.find((o) => o.value === item.nivel)?.label ?? item.nivel : '—'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground capitalize">
+                      {item.modalidade ? modalidadeOptions.find((o) => o.value === item.modalidade)?.label ?? item.modalidade : '—'}
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {item.carga_horaria != null ? `${item.carga_horaria}h` : '—'}
+                    </TableCell>
+                    {canManage && (
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditSheet(item)}
+                            className="gap-1"
+                          >
+                            <Pencil className="w-4 h-4" />
+                            Editar
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => openDeleteDialog(item)}
+                            aria-label="Excluir"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+
+      {/* Sheet Criar/Editar */}
+      <Sheet open={sheetOpen} onOpenChange={(open) => !open && closeSheet()}>
+        <SheetContent side="right" className="flex flex-col p-0 sm:max-w-xl overflow-y-auto">
+          <div className="flex flex-col gap-6 p-6 pr-12">
+            <SheetHeader className="p-0">
+              <SheetTitle className="font-serif text-2xl font-bold">
+                {editingItem ? 'Editar Treinamento' : 'Novo Treinamento'}
+              </SheetTitle>
+            </SheetHeader>
+            <form onSubmit={handleSubmit(onSave)} className="flex flex-col gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="titulo">Título *</Label>
+                <Input
+                  id="titulo"
+                  placeholder="Ex.: Gestão de Projetos"
+                  {...register('titulo')}
+                />
+                {errors.titulo && (
+                  <p className="text-destructive text-xs">{errors.titulo.message}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="conteudo">Conteúdo Programático</Label>
+                <Textarea
+                  id="conteudo"
+                  className="min-h-[100px] resize-y"
+                  placeholder="Descreva os temas..."
+                  {...register('conteudo_programatico')}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="objetivo">Objetivo</Label>
+                <Textarea
+                  id="objetivo"
+                  className="min-h-[100px] resize-y"
+                  placeholder="Qual o objetivo?"
+                  {...register('objetivo')}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="carga_horaria">Carga Horária (horas)</Label>
+                <div className="relative">
+                  <Input
+                    id="carga_horaria"
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    className="pr-14"
+                    {...register('carga_horaria', { valueAsNumber: true })}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                    horas
+                  </span>
+                </div>
+                {errors.carga_horaria && (
+                  <p className="text-destructive text-xs">{errors.carga_horaria.message}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="categoria">Categoria</Label>
+                <Input
+                  id="categoria"
+                  placeholder="Ex.: Tecnologia, Gestão"
+                  {...register('categoria')}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Nível</Label>
+                <Controller
+                  control={control}
+                  name="nivel"
+                  render={({ field }) => (
+                    <Select value={field.value || undefined} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {nivelOptions.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Modalidade</Label>
+                <Controller
+                  control={control}
+                  name="modalidade"
+                  render={({ field }) => (
+                    <Select value={field.value || undefined} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {modalidadeOptions.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Controller
+                  control={control}
+                  name="status"
+                  render={({ field }) => (
+                    <Select value={field.value || undefined} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statusOptions.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>
+                            {o.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="imagem_url">Imagem/Capa (URL)</Label>
+                <Input
+                  id="imagem_url"
+                  type="url"
+                  placeholder="https://..."
+                  {...register('imagem_url')}
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={closeSheet}>
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={submitting} className="bg-[#00C9A7] hover:bg-[#00C9A7]/90">
+                  {submitting ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Alert Excluir */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir treinamento do catálogo</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir &quot;{itemToDelete?.titulo}&quot;? Esta ação não pode
+              ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={submitting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {submitting ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}

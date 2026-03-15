@@ -20,6 +20,7 @@ import {
   ChevronDown,
   ChevronLeft,
   BookOpen,
+  Library,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TenantSelector } from '@/components/tenant-selector'
@@ -39,6 +40,7 @@ const mainNavItems: Array<{
   { href: '/dashboard/gestao/minhas-trilhas', label: 'Minhas Trilhas', icon: BookOpen, permission: 'ver_minhas_trilhas', trilhasOnly: true },
   { href: '/dashboard/gestao/treinamentos/novo', label: 'Registrar Treinamento', icon: PlusCircle, permission: null, registrarAny: true },
   { href: '/dashboard/gestao/historico', label: 'Histórico de Treinamentos', icon: List, permission: null },
+  { href: '/dashboard/gestao/catalogo', label: 'Treinamentos', icon: Library, permission: null },
   { href: '/dashboard/gestao/relatorios', label: 'Relatórios', icon: BarChart2, permission: null },
 ]
 
