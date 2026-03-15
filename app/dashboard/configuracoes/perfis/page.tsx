@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, Shield, LayoutGrid, ClipboardList, BookOpen } from 'lucide-react'
+import { Plus, Pencil, Trash2, Shield, ClipboardList, BookOpen } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@/lib/use-user'
@@ -40,27 +40,12 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 const ICON_MAP = {
-  LayoutGrid,
   Shield,
   ClipboardList,
   BookOpen,
 } as const
 
 const PERMISSOES_AGRUPADAS = [
-  {
-    grupo: 'Acesso aos Módulos',
-    icone: 'LayoutGrid' as const,
-    cor: '#00C9A7',
-    categorias: [
-      {
-        categoria: null as string | null,
-        permissoes: [
-          { key: 'acessar_modulo_gestao' as const, label: 'Gestão de Treinamentos' },
-          { key: 'acessar_modulo_trilhas' as const, label: 'Trilhas de Conhecimento' },
-        ],
-      },
-    ],
-  },
   {
     grupo: 'Administração',
     icone: 'Shield' as const,
@@ -138,7 +123,7 @@ const PERMISSOES_AGRUPADAS = [
   },
 ]
 
-const GRUPOS_EDITAVEIS_ADMIN = ['Acesso aos Módulos', 'Administração']
+const GRUPOS_EDITAVEIS_ADMIN = ['Administração']
 
 function getTodasPermissoes(): string[] {
   const keys: string[] = []
@@ -179,6 +164,7 @@ export default function PerfisPage() {
 
   const fetchPerfis = async () => {
     if (!activeTenantId) return
+    const supabase = createClient()
     setLoading(true)
     try {
       const { data, error } = await supabase
@@ -208,8 +194,8 @@ export default function PerfisPage() {
   }
 
   useEffect(() => {
-    if (activeTenantId) fetchPerfis()
-  }, [activeTenantId])
+    if (activeTenantId && user) fetchPerfis()
+  }, [activeTenantId, user])
 
   const openNewDialog = () => {
     setEditingPerfil(null)
@@ -416,7 +402,7 @@ export default function PerfisPage() {
     )
   }
 
-  const canManage = user?.isMaster()
+  const canManage = user?.isMaster() || user?.isAdmin?.()
 
   return (
     <div className="flex flex-col gap-6">
@@ -542,8 +528,7 @@ export default function PerfisPage() {
               <Label>Permissões</Label>
               {editingPerfil?.is_admin && (
                 <p className="text-xs text-muted-foreground mb-3">
-                  Perfis Admin têm acesso completo às permissões internas.
-                  Configure apenas o acesso aos módulos acima.
+                  Perfis Admin têm acesso completo a todas as permissões internas.
                 </p>
               )}
               <ScrollArea className="h-[340px] rounded-md border border-border p-3">

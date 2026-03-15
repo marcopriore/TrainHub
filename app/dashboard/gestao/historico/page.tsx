@@ -570,6 +570,7 @@ export default function HistoricoPage() {
       const userEmail = user?.email
       if (!userEmail) {
         setTreinamentos([])
+        setLoading(false)
         return
       }
 
@@ -578,17 +579,16 @@ export default function HistoricoPage() {
         .select('id')
         .eq('tenant_id', activeTenantId)
         .eq('email', userEmail)
-        .single()
-      if (colError) {
-        if (colError.code === 'PGRST116') {
-          setTreinamentos([])
-          return
-        }
-        throw colError
-      }
+        .maybeSingle()
+
       if (!colData) {
         setTreinamentos([])
+        setLoading(false)
         return
+      }
+
+      if (colError) {
+        throw colError
       }
 
       const colaboradorId = (colData as { id: string }).id
@@ -600,6 +600,7 @@ export default function HistoricoPage() {
       const ids = (tcData ?? []).map((r: { treinamento_id: string }) => r.treinamento_id)
       if (ids.length === 0) {
         setTreinamentos([])
+        setLoading(false)
         return
       }
 

@@ -14,25 +14,20 @@ export default function ConfiguracoesLayout({
   const { user, loading } = useUser()
 
   useEffect(() => {
-    if (loading || !user) return
-
+    if (loading) return
+    if (!user) {
+      router.replace('/dashboard')
+      return
+    }
     if (!user.isMaster() && !user.isAdmin?.()) {
       toast.error('Acesso restrito a administradores.')
       router.replace('/dashboard')
     }
-  }, [loading, user, router])
+  }, [user, loading, router])
 
-  if (loading) {
-    return <>{children}</>
-  }
-
-  if (!user) {
-    return <>{children}</>
-  }
-
-  if (!user.isMaster() && !user.isAdmin?.()) {
-    return null
-  }
+  if (loading) return null
+  if (!user) return null
+  if (!user.isMaster() && !user.isAdmin?.()) return null
 
   return <>{children}</>
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   GraduationCap,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useUser } from '@/lib/use-user'
 import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase'
 import { NotificacoesSino } from '@/components/notificacoes-sino'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -24,12 +26,49 @@ const COR_CATALOGO = '#8b5cf6'
 const COR_AVALIACOES = '#f59e0b'
 
 export default function ModulosPage() {
-  const { user, loading } = useUser()
+  const { user, loading, getActiveTenantId } = useUser()
+  const activeTenantId = getActiveTenantId()
+
+  const [modulosAtivos, setModulosAtivos] = useState<Record<string, boolean>>({})
+  const [loadingModulos, setLoadingModulos] = useState(true)
+
+  useEffect(() => {
+    const fetchModulos = async () => {
+      if (!activeTenantId) {
+        setModulosAtivos({})
+        setLoadingModulos(false)
+        return
+      }
+      try {
+        const supabase = createClient()
+        const { data } = await supabase
+          .from('tenant_modulos')
+          .select('modulo, ativo')
+          .eq('tenant_id', activeTenantId)
+
+        const map: Record<string, boolean> = {}
+        for (const row of data ?? []) {
+          map[row.modulo] = row.ativo
+        }
+        setModulosAtivos(map)
+      } catch {
+        setModulosAtivos({})
+      } finally {
+        setLoadingModulos(false)
+      }
+    }
+
+    if (user) {
+      fetchModulos()
+    } else {
+      setLoadingModulos(false)
+    }
+  }, [activeTenantId, user?.id])
 
   const podeAcessarGestao =
-    user?.isMaster?.() || user?.hasPermission?.('acessar_modulo_gestao')
+    user?.isMaster?.() || modulosAtivos['gestao'] === true
   const podeAcessarTrilhas =
-    user?.isMaster?.() || user?.hasPermission?.('acessar_modulo_trilhas')
+    user?.isMaster?.() || modulosAtivos['trilhas'] === true
   const podeAcessarConfiguracoes = user?.isMaster?.() || user?.isAdmin?.()
 
   const initials = user?.nome
@@ -115,6 +154,13 @@ export default function ModulosPage() {
           Selecione um módulo para começar
         </p>
 
+        {loadingModulos ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-10">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-52 rounded-2xl" />
+            ))}
+          </div>
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-10">
           {/* Card 1 — Gestão de Treinamentos */}
           {podeAcessarGestao ? (
@@ -151,12 +197,12 @@ export default function ModulosPage() {
               role="button"
               tabIndex={0}
               onClick={() =>
-                toast.error('Você não tem permissão para acessar este módulo. Entre em contato com o administrador.')
+                toast.error('Este módulo não está habilitado para sua organização. Entre em contato com o administrador.')
               }
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
-                  toast.error('Você não tem permissão para acessar este módulo. Entre em contato com o administrador.')
+                  toast.error('Este módulo não está habilitado para sua organização. Entre em contato com o administrador.')
                 }
               }}
               className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 opacity-60 cursor-not-allowed"
@@ -222,12 +268,12 @@ export default function ModulosPage() {
               role="button"
               tabIndex={0}
               onClick={() =>
-                toast.error('Você não tem permissão para acessar este módulo. Entre em contato com o administrador.')
+                toast.error('Este módulo não está habilitado para sua organização. Entre em contato com o administrador.')
               }
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
-                  toast.error('Você não tem permissão para acessar este módulo. Entre em contato com o administrador.')
+                  toast.error('Este módulo não está habilitado para sua organização. Entre em contato com o administrador.')
                 }
               }}
               className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 opacity-60 cursor-not-allowed"
@@ -316,6 +362,7 @@ export default function ModulosPage() {
             </div>
           </div>
         </div>
+        )}
       </main>
     </div>
   )

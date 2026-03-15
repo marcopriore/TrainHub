@@ -185,6 +185,7 @@ export default function DashboardPage() {
           setBarData([])
           setDonutData([])
           setRecentes([])
+          setLoading(false)
           return
         }
 
@@ -193,19 +194,8 @@ export default function DashboardPage() {
           .select('id')
           .eq('tenant_id', activeTenantId)
           .eq('email', userEmail)
-          .single()
+          .maybeSingle()
 
-        if (colErr) {
-          if (colErr.code === 'PGRST116') {
-            setKpiData(null)
-            setBarData([])
-            setDonutData([])
-            setRecentes([])
-            setLoading(false)
-            return
-          }
-          throw colErr
-        }
         if (!colData) {
           setKpiData(null)
           setBarData([])
@@ -213,6 +203,10 @@ export default function DashboardPage() {
           setRecentes([])
           setLoading(false)
           return
+        }
+
+        if (colErr) {
+          throw colErr
         }
 
         const colaboradorId = (colData as { id: string }).id
@@ -228,6 +222,7 @@ export default function DashboardPage() {
           setBarData([])
           setDonutData([])
           setRecentes([])
+          setLoading(false)
           return
         }
 

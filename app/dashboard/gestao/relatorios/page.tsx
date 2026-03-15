@@ -154,6 +154,7 @@ export default function RelatoriosPage() {
       if (!userEmail) {
         setTreinamentos([])
         setTcData([])
+        setLoading(false)
         return
       }
 
@@ -162,11 +163,17 @@ export default function RelatoriosPage() {
         .select('id')
         .eq('tenant_id', activeTenantId)
         .eq('email', userEmail)
-        .single()
-      if (colError || !colData) {
+        .maybeSingle()
+
+      if (!colData) {
         setTreinamentos([])
         setTcData([])
+        setLoading(false)
         return
+      }
+
+      if (colError) {
+        throw colError
       }
 
       const colaboradorId = (colData as { id: string }).id
@@ -179,6 +186,7 @@ export default function RelatoriosPage() {
       if (ids.length === 0) {
         setTreinamentos([])
         setTcData([])
+        setLoading(false)
         return
       }
 
