@@ -111,6 +111,7 @@ export default function CatalogoPage() {
   const [filtroCategoria, setFiltroCategoria] = useState<string>('todas')
   const [filtroNivel, setFiltroNivel] = useState<string>('todos')
   const [filtroModalidade, setFiltroModalidade] = useState<string>('todas')
+  const [filterSelectOpen, setFilterSelectOpen] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<CatalogoItem | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -377,59 +378,94 @@ export default function CatalogoPage() {
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Input
-          placeholder="Buscar por título"
-          value={filtroTitulo}
-          onChange={(e) => setFiltroTitulo(e.target.value)}
-          className="w-[200px]"
-        />
-        <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="ativo">Ativo</SelectItem>
-            <SelectItem value="inativo">Inativo</SelectItem>
-            <SelectItem value="rascunho">Rascunho</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Categoria" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Todas</SelectItem>
-            {categoriasDistintas.map((c) => (
-              <SelectItem key={c} value={c}>
-                {c}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={filtroNivel} onValueChange={setFiltroNivel}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Nível" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="basico">Básico</SelectItem>
-            <SelectItem value="intermediario">Intermediário</SelectItem>
-            <SelectItem value="avancado">Avançado</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filtroModalidade} onValueChange={setFiltroModalidade}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Modalidade" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Todas</SelectItem>
-            <SelectItem value="presencial">Presencial</SelectItem>
-            <SelectItem value="online">Online</SelectItem>
-            <SelectItem value="hibrido">Híbrido</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Buscar</Label>
+          <Input
+            placeholder="Buscar por título"
+            value={filtroTitulo}
+            onChange={(e) => setFiltroTitulo(e.target.value)}
+            className="w-[200px]"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Status</Label>
+          <Select
+            value={filtroStatus}
+            onValueChange={setFiltroStatus}
+            open={filterSelectOpen === 'status'}
+            onOpenChange={(open) => setFilterSelectOpen(open ? 'status' : null)}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              <SelectItem value="ativo">Ativo</SelectItem>
+              <SelectItem value="inativo">Inativo</SelectItem>
+              <SelectItem value="rascunho">Rascunho</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Categoria</Label>
+          <Select
+            value={filtroCategoria}
+            onValueChange={setFiltroCategoria}
+            open={filterSelectOpen === 'categoria'}
+            onOpenChange={(open) => setFilterSelectOpen(open ? 'categoria' : null)}
+          >
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">Todas</SelectItem>
+              {categoriasDistintas.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Nível</Label>
+          <Select
+            value={filtroNivel}
+            onValueChange={setFiltroNivel}
+            open={filterSelectOpen === 'nivel'}
+            onOpenChange={(open) => setFilterSelectOpen(open ? 'nivel' : null)}
+          >
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Nível" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              <SelectItem value="basico">Básico</SelectItem>
+              <SelectItem value="intermediario">Intermediário</SelectItem>
+              <SelectItem value="avancado">Avançado</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Modalidade</Label>
+          <Select
+            value={filtroModalidade}
+            onValueChange={setFiltroModalidade}
+            open={filterSelectOpen === 'modalidade'}
+            onOpenChange={(open) => setFilterSelectOpen(open ? 'modalidade' : null)}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Modalidade" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">Todas</SelectItem>
+              <SelectItem value="presencial">Presencial</SelectItem>
+              <SelectItem value="online">Online</SelectItem>
+              <SelectItem value="hibrido">Híbrido</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <Button variant="outline" size="sm" onClick={handleLimparFiltros}>
           Limpar Filtros
         </Button>

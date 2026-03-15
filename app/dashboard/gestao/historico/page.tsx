@@ -819,44 +819,56 @@ export default function HistoricoPage() {
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Tipo" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="parceiro">Parceiro</SelectItem>
-            <SelectItem value="colaborador">Colaborador</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Empresa Parceira" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Todas</SelectItem>
-            {empresas.map((e) => (
-              <SelectItem key={e.id} value={e.id}>
-                {e.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Input
-          type="date"
-          placeholder="Data Início"
-          value={filtroDataInicio}
-          onChange={(e) => setFiltroDataInicio(e.target.value)}
-          className="w-[150px]"
-        />
-        <Input
-          type="date"
-          placeholder="Data Fim"
-          value={filtroDataFim}
-          onChange={(e) => setFiltroDataFim(e.target.value)}
-          className="w-[150px]"
-        />
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Tipo</Label>
+          <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              <SelectItem value="parceiro">Parceiro</SelectItem>
+              <SelectItem value="colaborador">Colaborador</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Empresa Parceira</Label>
+          <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Empresa Parceira" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">Todas</SelectItem>
+              {empresas.map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Data Início</Label>
+          <Input
+            type="date"
+            placeholder="Data Início"
+            value={filtroDataInicio}
+            onChange={(e) => setFiltroDataInicio(e.target.value)}
+            className="w-[150px]"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Data Fim</Label>
+          <Input
+            type="date"
+            placeholder="Data Fim"
+            value={filtroDataFim}
+            onChange={(e) => setFiltroDataFim(e.target.value)}
+            className="w-[150px]"
+          />
+        </div>
         <Button variant="outline" size="sm" onClick={handleLimparFiltros}>
           Limpar Filtros
         </Button>

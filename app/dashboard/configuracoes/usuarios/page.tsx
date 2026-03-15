@@ -543,16 +543,19 @@ export default function UsuariosPage() {
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
               <div className="p-4 border-b border-border flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
                 <h3 className="font-semibold">Usuários do tenant</h3>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-end gap-2">
                   {usuarios.length > 0 && (
-                    <div className="relative flex-1 sm:flex-initial w-72">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Buscar por nome ou e-mail"
-                        value={userSearch}
-                        onChange={(e) => setUserSearch(e.target.value)}
-                        className="pl-9 h-9"
-                      />
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-xs text-muted-foreground">Buscar</Label>
+                      <div className="relative flex-1 sm:flex-initial w-72">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Buscar por nome ou e-mail"
+                          value={userSearch}
+                          onChange={(e) => setUserSearch(e.target.value)}
+                          className="pl-9 h-9"
+                        />
+                      </div>
                     </div>
                   )}
                   {podeImportar && (
