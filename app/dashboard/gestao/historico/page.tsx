@@ -832,12 +832,12 @@ export default function HistoricoPage() {
     }
   }
 
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    })
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '—'
+    const [ano, mes, dia] = dateStr.split('-')
+    if (!ano || !mes || !dia) return dateStr
+    return `${dia}/${mes}/${ano}`
+  }
 
   const empresaNome = (t: Treinamento) =>
     t.empresas_parceiras?.nome ?? '—'

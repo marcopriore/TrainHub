@@ -413,8 +413,9 @@ export default function RelatoriosPage() {
   const horasPorPeriodo = useMemo(() => {
     return meses.map(({ mes, mesNum, ano }) => {
       const doMes = allTreinamentos.filter((t) => {
-        const d = new Date(t.data_treinamento)
-        return d.getMonth() === mesNum && d.getFullYear() === ano
+        const [year, month] = t.data_treinamento.split('-').map((v) => Number(v))
+        if (!year || !month) return false
+        return month - 1 === mesNum && year === ano
       })
       const parceiro = doMes.filter((t) => t.tipo === 'parceiro').reduce((a, t) => a + (t.carga_horaria ?? 0), 0)
       const colaborador = doMes.filter((t) => t.tipo === 'colaborador').reduce((a, t) => a + (t.carga_horaria ?? 0), 0)
@@ -457,8 +458,9 @@ export default function RelatoriosPage() {
   const indicesPorMes = useMemo(() => {
     return meses.map(({ mes, mesNum, ano }) => {
       const doMes = allTreinamentos.filter((t) => {
-        const d = new Date(t.data_treinamento)
-        return d.getMonth() === mesNum && d.getFullYear() === ano
+        const [year, month] = t.data_treinamento.split('-').map((v) => Number(v))
+        if (!year || !month) return false
+        return month - 1 === mesNum && year === ano
       })
       const comSat = doMes.filter((t) => t.indice_satisfacao != null)
       const comAprov = doMes.filter((t) => t.indice_aprovacao != null)

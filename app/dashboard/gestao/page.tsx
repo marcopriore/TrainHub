@@ -100,8 +100,9 @@ function processarDados(treinamentos: TreinamentoRow[]) {
   const ultimos6Meses = getUltimos6Meses()
   const barData: MonthlyBarData[] = ultimos6Meses.map(({ mes, mesNum, ano }) => {
     const doMes = treinamentos.filter((t) => {
-      const d = new Date(t.data_treinamento)
-      return d.getMonth() === mesNum && d.getFullYear() === ano
+      const [year, month] = t.data_treinamento.split('-').map((v) => Number(v))
+      if (!year || !month) return false
+      return month - 1 === mesNum && year === ano
     })
     const parceiro = doMes
       .filter((t) => t.tipo === 'parceiro')

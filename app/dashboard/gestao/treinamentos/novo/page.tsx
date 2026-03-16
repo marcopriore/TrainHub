@@ -409,6 +409,7 @@ function ParceiroForm({
   tenantId: string | null
   onSuccess: () => void
 }) {
+  const router = useRouter()
   const [catalogoItemSelecionado, setCatalogoItemSelecionado] = useState<string | null>(null)
   const [modoSatisfacao, setModoSatisfacao] = useState<'manual' | 'pesquisa'>('manual')
   const [formularioSelecionado, setFormularioSelecionado] = useState<string | null>(null)
@@ -499,9 +500,8 @@ function ParceiroForm({
 
   const handleFecharLinkDialog = () => {
     setLinksDialogOpen(false)
-    // Limpeza de estado local (dados do formulário já foram enviados)
     setLinksGerados([])
-    onSuccess()
+    router.push('/dashboard/gestao/historico')
   }
 
   return (
@@ -829,6 +829,7 @@ function ColaboradorForm({
   colaboradorLogado: { id: string; nome: string } | null
   onSuccess: () => void
 }) {
+  const router = useRouter()
   const [catalogoItemSelecionado, setCatalogoItemSelecionado] = useState<string | null>(null)
   const [modoSatisfacao, setModoSatisfacao] = useState<'manual' | 'pesquisa'>('manual')
   const [formularioSelecionado, setFormularioSelecionado] = useState<string | null>(null)
@@ -984,6 +985,12 @@ function ColaboradorForm({
   const copyAllLinks = () => {
     const urls = linksGerados.map((l) => `${origin}/pesquisa/${l.token}`).join('\n')
     navigator.clipboard.writeText(urls).then(() => toast.success('Todos os links copiados.'))
+  }
+
+  const handleFecharLinkDialog = () => {
+    setLinksDialogOpen(false)
+    setLinksGerados([])
+    router.push('/dashboard/gestao/historico')
   }
 
   return (
@@ -1319,7 +1326,14 @@ function ColaboradorForm({
         {isSubmitting ? 'Salvando...' : 'Salvar Treinamento'}
       </Button>
 
-      <Dialog open={linksDialogOpen} onOpenChange={setLinksDialogOpen}>
+      <Dialog
+        open={linksDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleFecharLinkDialog()
+          }
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-serif">Links de pesquisa gerados</DialogTitle>
@@ -1353,7 +1367,7 @@ function ColaboradorForm({
             <Button
               type="button"
               className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
-              onClick={() => { setLinksDialogOpen(false); onSuccess() }}
+              onClick={handleFecharLinkDialog}
             >
               Fechar e continuar
             </Button>

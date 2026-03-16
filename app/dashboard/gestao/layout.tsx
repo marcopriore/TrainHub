@@ -15,6 +15,7 @@ export default function GestaoLayout({ children }: { children: React.ReactNode }
 
   const [modulosAtivos, setModulosAtivos] = useState<Record<string, boolean>>({})
   const [loadingModulos, setLoadingModulos] = useState(true)
+  const modulosCarregados = Object.keys(modulosAtivos).length > 0
 
   useEffect(() => {
     const fetchModulos = async () => {
@@ -50,20 +51,27 @@ export default function GestaoLayout({ children }: { children: React.ReactNode }
   }, [activeTenantId, user?.id])
 
   useEffect(() => {
-    if (loading || !user) return
-    if (user.isMaster()) return
-    if (loadingModulos) return
+    if (loading) return
 
-    const isMinhasTrilhas = pathname?.startsWith('/dashboard/gestao/minhas-trilhas')
-    const hasAccess = isMinhasTrilhas
-      ? modulosAtivos['trilhas'] === true
-      : modulosAtivos['gestao'] === true
+    if (!user) {
+      router.replace('/login')
+      return
+    }
+
+    if (user.isMaster()) return
+    if (loadingModulos || !modulosCarregados) return
+
+    const isMinhasTrilhas = pathname?.includes('/minhas-trilhas')
+    const moduloNecessario = isMinhasTrilhas ? 'trilhas' : 'gestao'
+    const hasAccess = modulosAtivos[moduloNecessario] === true
 
     if (!hasAccess) {
-      toast.error('Este módulo não está habilitado para sua organização. Entre em contato com o administrador.')
+      toast.error(
+        'Este módulo não está habilitado para sua organização. Entre em contato com o administrador.'
+      )
       router.replace('/dashboard')
     }
-  }, [loading, user, loadingModulos, modulosAtivos, pathname, router])
+  }, [loading, user, loadingModulos, modulosCarregados, modulosAtivos, pathname, router])
 
   if (loading || !user) {
     return <>{children}</>
