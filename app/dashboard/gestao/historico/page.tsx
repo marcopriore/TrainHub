@@ -560,7 +560,25 @@ export default function HistoricoPage() {
       if (user?.isMaster() || user?.isAdmin?.()) {
         const { data, error } = await supabase
           .from('treinamentos')
-          .select('*, empresas_parceiras(nome)')
+          .select(
+            `
+              id,
+              codigo,
+              tipo,
+              nome,
+              conteudo,
+              objetivo,
+              carga_horaria,
+              empresa_parceira_id,
+              quantidade_pessoas,
+              data_treinamento,
+              indice_satisfacao,
+              indice_aprovacao,
+              criado_em,
+              tenant_id,
+              empresas_parceiras(nome)
+            `
+          )
           .eq('tenant_id', activeTenantId)
           .order('data_treinamento', { ascending: false })
         if (error) throw error
@@ -607,7 +625,25 @@ export default function HistoricoPage() {
 
       const { data, error } = await supabase
         .from('treinamentos')
-          .select('*, empresas_parceiras(nome)')
+        .select(
+          `
+            id,
+            codigo,
+            tipo,
+            nome,
+            conteudo,
+            objetivo,
+            carga_horaria,
+            empresa_parceira_id,
+            quantidade_pessoas,
+            data_treinamento,
+            indice_satisfacao,
+            indice_aprovacao,
+            criado_em,
+            tenant_id,
+            empresas_parceiras(nome)
+          `
+        )
         .in('id', ids)
         .order('data_treinamento', { ascending: false })
       if (error) throw error
