@@ -243,7 +243,8 @@ export default function DashboardPage() {
         setDonutData(donut)
         setRecentes(rec)
       } catch (error) {
-        console.error('Erro ao carregar dados do dashboard:', error)
+        console.error('Erro ao carregar dados do dashboard:', JSON.stringify(error, null, 2))
+        if (error instanceof Error) console.error('Message:', error.message, 'Stack:', error.stack)
         toast.error('Não foi possível carregar os dados. Tente novamente.')
       } finally {
         setLoading(false)

@@ -19,6 +19,7 @@ import { createClient } from '@/lib/supabase'
 import { NotificacoesSino } from '@/components/notificacoes-sino'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { TenantSelector } from '@/components/tenant-selector'
 
 const COR_GESTAO = '#00C9A7'
 const COR_TRILHAS = '#3b82f6'
@@ -100,49 +101,56 @@ export default function ModulosPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="h-16 bg-sidebar flex items-center justify-between px-8 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0 shadow-md shadow-primary/30">
-            <GraduationCap className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="font-serif text-xl font-bold text-white tracking-tight">
-            TrainHub
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          {podeAcessarConfiguracoes && (
-            <Link
-              href="/dashboard/configuracoes"
-              title="Configurações do Hub"
-              className="p-2 rounded-lg text-sidebar-foreground/70 hover:text-white hover:bg-sidebar-accent/40 transition-all duration-200"
-            >
-              <Settings className="w-4.5 h-4.5" />
-            </Link>
-          )}
-          <Link
-            href="/dashboard/perfil"
-            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-sidebar-accent/40 transition-colors"
-          >
-            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-xs font-semibold text-primary">{initials}</span>
+      <header className="bg-sidebar flex flex-col px-8 py-3 gap-3 shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0 shadow-md shadow-primary/30">
+              <GraduationCap className="w-5 h-5 text-primary-foreground" />
             </div>
-          </Link>
-          <NotificacoesSino variant="compact" />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40"
-            onClick={async () => {
-              const { createClient } = await import('@/lib/supabase')
-              const supabase = createClient()
-              await supabase.auth.signOut()
-              window.location.href = '/login'
-            }}
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Sair
-          </Button>
+            <span className="font-serif text-xl font-bold text-white tracking-tight">
+              TrainHub
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            {podeAcessarConfiguracoes && (
+              <Link
+                href="/dashboard/configuracoes"
+                title="Configurações do Hub"
+                className="p-2 rounded-lg text-sidebar-foreground/70 hover:text-white hover:bg-sidebar-accent/40 transition-all duration-200"
+              >
+                <Settings className="w-4.5 h-4.5" />
+              </Link>
+            )}
+            <Link
+              href="/dashboard/perfil"
+              className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-sidebar-accent/40 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-semibold text-primary">{initials}</span>
+              </div>
+            </Link>
+            <NotificacoesSino variant="compact" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40"
+              onClick={async () => {
+                const { createClient } = await import('@/lib/supabase')
+                const supabase = createClient()
+                await supabase.auth.signOut()
+                window.location.href = '/login'
+              }}
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sair
+            </Button>
+          </div>
         </div>
+        {user.isMaster?.() && (
+          <div className="flex justify-start">
+            <TenantSelector />
+          </div>
+        )}
       </header>
 
       {/* Content */}

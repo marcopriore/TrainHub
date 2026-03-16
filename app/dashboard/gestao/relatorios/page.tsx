@@ -324,7 +324,8 @@ export default function RelatoriosPage() {
       if (tcErr) throw tcErr
       setTcData((tcRes as unknown as TreinamentoColaboradorRow[]) ?? [])
     } catch (error) {
-      console.error('Erro ao carregar relatórios:', error)
+      console.error('Erro ao carregar relatórios:', JSON.stringify(error, null, 2))
+      if (error instanceof Error) console.error('Message:', error.message, 'Stack:', error.stack)
       toast.error('Não foi possível carregar os dados. Tente novamente.')
       setTreinamentos([])
       setAllTreinamentos([])
