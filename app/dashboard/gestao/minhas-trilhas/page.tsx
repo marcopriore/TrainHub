@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { gerarCertificadoPDF } from '@/app/dashboard/gestao/catalogo/page'
 
 interface TreinamentoRow {
   id: string
@@ -63,6 +64,11 @@ export default function MinhasTrilhasPage() {
   const [loading, setLoading] = useState(true)
   const [colaboradorNaoEncontrado, setColaboradorNaoEncontrado] = useState(false)
   const [treinamentos, setTreinamentos] = useState<TreinamentoRow[]>([])
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [certificadoTemplate, setCertificadoTemplate] = useState<{
+    imagem_url: string | null
+    campos_posicoes: any
+  } | null>(null)
 
   useEffect(() => {
     if (!activeTenantId || !user?.email) {
@@ -130,6 +136,21 @@ export default function MinhasTrilhasPage() {
         if (trErr) throw trErr
 
         setTreinamentos(((trData ?? []) as TreinamentoRow[]) ?? [])
+
+        // 5. Buscar template de certificado do tenant
+        const { data: templateData, error: templateErr } = await supabase
+          .from('certificado_templates')
+          .select('imagem_url, campos_posicoes')
+          .eq('tenant_id', activeTenantId)
+          .maybeSingle()
+
+        if (templateErr && templateErr.code !== 'PGRST116') {
+          console.error('Erro ao carregar template de certificado:', templateErr)
+        }
+
+        setCertificadoTemplate(
+          (templateData as { imagem_url: string | null; campos_posicoes: any } | null) ?? null
+        )
       } catch (error) {
         console.error('Erro ao carregar minhas trilhas:', JSON.stringify(error, null, 2))
         if (error instanceof Error) {
@@ -177,6 +198,35 @@ export default function MinhasTrilhasPage() {
         .join('')
         .toUpperCase()
     : '—'
+
+  const handleBaixarCertificado = async (treinamento: TreinamentoRow) => {
+    if (!certificadoTemplate?.imagem_url) {
+      toast.error('Template de certificado não configurado para este tenant.')
+      return
+    }
+
+    setDownloadingId(treinamento.id)
+    try {
+      const nomeColaborador =
+        (user as any)?.nome ?? (user as any)?.email ?? 'Colaborador'
+
+      await gerarCertificadoPDF({
+        templateImageUrl: certificadoTemplate.imagem_url,
+        camposPosicoes: certificadoTemplate.campos_posicoes,
+        nomeColaborador,
+        nomeTreinamento: treinamento.nome,
+        cargaHoraria: String(treinamento.carga_horaria ?? ''),
+        dataConclusao: treinamento.data_treinamento ?? new Date().toISOString().split('T')[0],
+      })
+
+      toast.success('Certificado gerado com sucesso!')
+    } catch (error) {
+      console.error('Erro ao gerar certificado na tela Minhas Trilhas:', error)
+      toast.error('Erro ao gerar certificado. Tente novamente.')
+    } finally {
+      setDownloadingId(null)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -346,14 +396,36 @@ export default function MinhasTrilhasPage() {
                     {formatDate(t.data_treinamento)}
                   </TableCell>
                   <TableCell className="text-center">
-                    <button
-                      type="button"
-                      disabled
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground bg-muted cursor-not-allowed"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Baixar
-                    </button>
+                    {certificadoTemplate?.imagem_url ? (
+                      <button
+                        type="button"
+                        onClick={() => handleBaixarCertificado(t)}
+                        disabled={downloadingId === t.id}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-primary bg-primary/10 hover:bg-primary/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {downloadingId === t.id ? (
+                          <>
+                            <span className="h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                            Gerando...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-3.5 h-3.5" />
+                            Baixar
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground bg-muted cursor-not-allowed"
+                        title="Template de certificado não configurado"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Baixar
+                      </button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
