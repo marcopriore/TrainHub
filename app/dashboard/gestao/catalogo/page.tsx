@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { Plus, Pencil, Trash2, Award, Upload } from 'lucide-react'
+import jsPDF from 'jspdf'
+import html2canvas from 'html2canvas'
 import { useForm, Controller } from 'react-hook-form'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
@@ -43,6 +45,86 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
+
+type CamposPosicoes = {
+  corpo: { x: number; y: number; texto: string }
+  data: { x: number; y: number; texto: string }
+}
+
+export async function gerarCertificadoPDF(params: {
+  templateImageUrl: string
+  camposPosicoes: CamposPosicoes
+  nomeColaborador: string
+  nomeTreinamento: string
+  cargaHoraria: string
+  dataConclusao: string
+}) {
+  const { templateImageUrl, camposPosicoes, nomeColaborador, nomeTreinamento, cargaHoraria, dataConclusao } = params
+
+  if (typeof document === 'undefined') return
+
+  const container = document.createElement('div')
+  container.style.position = 'fixed'
+  container.style.left = '-9999px'
+  container.style.top = '0'
+  container.style.width = '1122px'
+  container.style.height = '794px'
+  container.style.backgroundImage = `url(${templateImageUrl})`
+  container.style.backgroundSize = 'cover'
+  container.style.backgroundPosition = 'center'
+  container.style.display = 'block'
+
+  const applyVariables = (texto: string) =>
+    texto
+      .replace(/{{\s*nome\s*}}/g, nomeColaborador)
+      .replace(/{{\s*treinamento\s*}}/g, nomeTreinamento)
+      .replace(/{{\s*carga_horaria\s*}}/g, cargaHoraria)
+      .replace(/{{\s*data\s*}}/g, dataConclusao)
+
+  const corpoDiv = document.createElement('div')
+  corpoDiv.textContent = applyVariables(camposPosicoes.corpo.texto)
+  corpoDiv.style.position = 'absolute'
+  corpoDiv.style.left = `${camposPosicoes.corpo.x}%`
+  corpoDiv.style.top = `${camposPosicoes.corpo.y}%`
+  corpoDiv.style.transform = 'translate(-50%, -50%)'
+  corpoDiv.style.color = '#ffffff'
+  corpoDiv.style.textAlign = 'center'
+  corpoDiv.style.fontSize = '14px'
+  corpoDiv.style.textShadow = '0 1px 3px rgba(0,0,0,0.7)'
+  corpoDiv.style.maxWidth = '80%'
+  corpoDiv.style.margin = '0 auto'
+
+  const dataDiv = document.createElement('div')
+  dataDiv.textContent = applyVariables(camposPosicoes.data.texto)
+  dataDiv.style.position = 'absolute'
+  dataDiv.style.left = `${camposPosicoes.data.x}%`
+  dataDiv.style.top = `${camposPosicoes.data.y}%`
+  dataDiv.style.transform = 'translate(-50%, -50%)'
+  dataDiv.style.color = '#ffffff'
+  dataDiv.style.textAlign = 'center'
+  dataDiv.style.fontSize = '12px'
+  dataDiv.style.textShadow = '0 1px 3px rgba(0,0,0,0.7)'
+
+  container.appendChild(corpoDiv)
+  container.appendChild(dataDiv)
+  document.body.appendChild(container)
+
+  try {
+    const canvas = await html2canvas(container, { scale: 2 })
+    const imgData = canvas.toDataURL('image/png')
+
+    const pdf = new jsPDF('landscape', 'pt', 'a4')
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+
+    pdf.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight)
+    const safeNome = nomeColaborador.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')
+    const safeTreinamento = nomeTreinamento.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')
+    pdf.save(`certificado-${safeNome}-${safeTreinamento}.pdf`)
+  } finally {
+    document.body.removeChild(container)
+  }
+}
 
 interface CatalogoItem {
   id: string
@@ -122,15 +204,23 @@ export default function CatalogoPage() {
   const [templateLoading, setTemplateLoading] = useState(false)
   const [templateUploading, setTemplateUploading] = useState(false)
   const [templateImageUrl, setTemplateImageUrl] = useState<string | null>(null)
-  const [camposPosicoes, setCamposPosicoes] = useState({
-    nome: { x: 50, y: 62 },
-    treinamento: { x: 50, y: 72 },
-    carga_horaria: { x: 50, y: 80 },
-    data: { x: 50, y: 87 },
+  const [camposPosicoes, setCamposPosicoes] = useState<CamposPosicoes>({
+    corpo: {
+      x: 50,
+      y: 55,
+      texto:
+        'Certificamos que {{nome}} participou do treinamento "{{treinamento}}" com carga horária de {{carga_horaria}} horas.',
+    },
+    data: {
+      x: 50,
+      y: 80,
+      texto: '{{data}}',
+    },
   })
   const previewRef = useRef<HTMLDivElement | null>(null)
-  const draggingFieldRef = useRef<keyof typeof camposPosicoes | null>(null)
+  const draggingFieldRef = useRef<keyof CamposPosicoes | null>(null)
   const dragOffsetRef = useRef<{ x: number; y: number } | null>(null)
+  const [templateTestingPdf, setTemplateTestingPdf] = useState(false)
 
   const supabase = createClient()
 
@@ -265,34 +355,35 @@ export default function CatalogoPage() {
         return
       }
 
-      const typed = data as { imagem_url: string | null; campos_posicoes?: any } | null
+      const typed = data as { imagem_url: string | null; campos_posicoes?: Partial<CamposPosicoes> } | null
       setTemplateImageUrl(typed?.imagem_url ?? null)
 
       if (typed?.campos_posicoes) {
         setCamposPosicoes((prev) => ({
-          nome: {
-            x: typed.campos_posicoes.nome?.x ?? prev.nome.x,
-            y: typed.campos_posicoes.nome?.y ?? prev.nome.y,
-          },
-          treinamento: {
-            x: typed.campos_posicoes.treinamento?.x ?? prev.treinamento.x,
-            y: typed.campos_posicoes.treinamento?.y ?? prev.treinamento.y,
-          },
-          carga_horaria: {
-            x: typed.campos_posicoes.carga_horaria?.x ?? prev.carga_horaria.x,
-            y: typed.campos_posicoes.carga_horaria?.y ?? prev.carga_horaria.y,
-          },
           data: {
             x: typed.campos_posicoes.data?.x ?? prev.data.x,
             y: typed.campos_posicoes.data?.y ?? prev.data.y,
+            texto: typed.campos_posicoes.data?.texto ?? prev.data.texto,
+          },
+          corpo: {
+            x: typed.campos_posicoes.corpo?.x ?? prev.corpo.x,
+            y: typed.campos_posicoes.corpo?.y ?? prev.corpo.y,
+            texto: typed.campos_posicoes.corpo?.texto ?? prev.corpo.texto,
           },
         }))
       } else {
         setCamposPosicoes({
-          nome: { x: 50, y: 62 },
-          treinamento: { x: 50, y: 72 },
-          carga_horaria: { x: 50, y: 80 },
-          data: { x: 50, y: 87 },
+          corpo: {
+            x: 50,
+            y: 55,
+            texto:
+              'Certificamos que {{nome}} participou do treinamento "{{treinamento}}" com carga horária de {{carga_horaria}} horas.',
+          },
+          data: {
+            x: 50,
+            y: 80,
+            texto: '{{data}}',
+          },
         })
       }
     } catch (error) {
@@ -408,7 +499,7 @@ export default function CatalogoPage() {
     }
   }
 
-  const saveTemplatePositions = async (positions: typeof camposPosicoes) => {
+  const saveTemplatePositions = async (positions: CamposPosicoes) => {
     if (!activeTenantId) return
     try {
       const supabase = createClient()
@@ -469,10 +560,7 @@ export default function CatalogoPage() {
     await saveTemplatePositions(positions)
   }
 
-  const handleFieldMouseDown = (
-    event: any,
-    field: keyof typeof camposPosicoes
-  ) => {
+  const handleFieldMouseDown = (event: any, field: keyof CamposPosicoes) => {
     if (!previewRef.current) return
     event.preventDefault()
     const rect = previewRef.current.getBoundingClientRect()
@@ -707,7 +795,65 @@ export default function CatalogoPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-5">
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-medium text-foreground">Configurar Textos</h3>
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">Texto principal</Label>
+                        <Textarea
+                          rows={3}
+                          value={camposPosicoes.corpo.texto}
+                          onChange={(e) =>
+                            setCamposPosicoes((prev) => ({
+                              ...prev,
+                              corpo: { ...prev.corpo, texto: e.target.value },
+                            }))
+                          }
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">Formato da data</Label>
+                        <Input
+                          value={camposPosicoes.data.texto}
+                          onChange={(e) =>
+                            setCamposPosicoes((prev) => ({
+                              ...prev,
+                              data: { ...prev.data, texto: e.target.value },
+                            }))
+                          }
+                          className="text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          {['{{nome}}', '{{treinamento}}', '{{carga_horaria}}', '{{data}}'].map(
+                            (variable) => (
+                              <button
+                                key={variable}
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await navigator.clipboard.writeText(variable)
+                                    toast.success('Variável copiada!')
+                                  } catch {
+                                    toast.error('Não foi possível copiar a variável.')
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 rounded-full bg-[#00C9A7]/10 text-[#00C9A7] px-2 py-0.5 hover:bg-[#00C9A7]/20 transition-colors"
+                              >
+                                <span className="text-[11px] font-mono">{variable}</span>
+                              </button>
+                            )
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Use as variáveis acima para inserir dados dinâmicos.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
                     <h3 className="text-sm font-medium text-foreground">Preview</h3>
                     {templateLoading ? (
                       <Skeleton className="w-full aspect-[16/9] rounded-lg" />
@@ -725,54 +871,34 @@ export default function CatalogoPage() {
                         />
                         <div className="absolute inset-0 bg-black/10" />
 
-                        {/* Nome */}
-                        <div
-                          className={cn(
-                            'absolute text-center text-white font-semibold drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]',
-                            'cursor-grab hover:outline hover:outline-1 hover:outline-dashed hover:outline-white/70'
-                          )}
-                          style={{
-                            left: `${camposPosicoes.nome.x}%`,
-                            top: `${camposPosicoes.nome.y}%`,
-                            transform: 'translate(-50%, -50%)',
-                          }}
-                          onMouseDown={(event) => handleFieldMouseDown(event, 'nome')}
-                        >
-                          <span className="text-xl sm:text-2xl">João da Silva</span>
-                        </div>
-
-                        {/* Treinamento */}
-                        <div
-                          className={cn(
-                            'absolute text-center text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]',
-                            'cursor-grab hover:outline hover:outline-1 hover:outline-dashed hover:outline-white/70'
-                          )}
-                          style={{
-                            left: `${camposPosicoes.treinamento.x}%`,
-                            top: `${camposPosicoes.treinamento.y}%`,
-                            transform: 'translate(-50%, -50%)',
-                          }}
-                          onMouseDown={(event) => handleFieldMouseDown(event, 'treinamento')}
-                        >
-                          <span className="text-base sm:text-lg font-medium">
-                            Nome do Treinamento
-                          </span>
-                        </div>
-
-                        {/* Carga horária */}
+                        {/* Corpo */}
                         <div
                           className={cn(
                             'absolute text-center text-white text-xs sm:text-sm drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]',
                             'cursor-grab hover:outline hover:outline-1 hover:outline-dashed hover:outline-white/70'
                           )}
                           style={{
-                            left: `${camposPosicoes.carga_horaria.x}%`,
-                            top: `${camposPosicoes.carga_horaria.y}%`,
+                            left: `${camposPosicoes.corpo.x}%`,
+                            top: `${camposPosicoes.corpo.y}%`,
                             transform: 'translate(-50%, -50%)',
+                            maxWidth: '80%',
                           }}
-                          onMouseDown={(event) => handleFieldMouseDown(event, 'carga_horaria')}
+                          onMouseDown={(event) => handleFieldMouseDown(event, 'corpo')}
                         >
-                          <span>40 horas</span>
+                          <span className="text-[14px] leading-snug">
+                            {camposPosicoes.corpo.texto
+                              .replace(/{{\s*nome\s*}}/g, 'João da Silva')
+                              .replace(/{{\s*treinamento\s*}}/g, 'Nome do Treinamento')
+                              .replace(/{{\s*carga_horaria\s*}}/g, '40')
+                              .replace(
+                                /{{\s*data\s*}}/g,
+                                new Date().toLocaleDateString('pt-BR', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                })
+                              )}
+                          </span>
                         </div>
 
                         {/* Data */}
@@ -789,11 +915,14 @@ export default function CatalogoPage() {
                           onMouseDown={(event) => handleFieldMouseDown(event, 'data')}
                         >
                           <span>
-                            {new Date().toLocaleDateString('pt-BR', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: 'numeric',
-                            })}
+                            {camposPosicoes.data.texto.replace(
+                              /{{\s*data\s*}}/g,
+                              new Date().toLocaleDateString('pt-BR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                              })
+                            )}
                           </span>
                         </div>
                       </div>
@@ -806,32 +935,58 @@ export default function CatalogoPage() {
                     )}
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 text-blue-500 px-2 py-0.5">
-                        <span className="text-[10px]">🔵</span>
-                        Nome
-                      </span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 text-green-500 px-2 py-0.5">
-                        <span className="text-[10px]">🟢</span>
-                        Treinamento
-                      </span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/10 text-yellow-500 px-2 py-0.5">
-                        <span className="text-[10px]">🟡</span>
-                        Carga Horária
-                      </span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 text-red-500 px-2 py-0.5">
-                        <span className="text-[10px]">🔴</span>
-                        Data
-                      </span>
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 text-blue-500 px-2 py-0.5">
+                          <span className="text-[10px]">🔵</span>
+                          Texto Principal
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 text-red-500 px-2 py-0.5">
+                          <span className="text-[10px]">🔴</span>
+                          Data
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Arraste as caixas de texto para posicioná-las na arte.
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Arraste os campos para posicioná-los na arte.
-                    </p>
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-2">
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={
+                      templateUploading || templateLoading || !templateImageUrl || templateTestingPdf
+                    }
+                    onClick={async () => {
+                      if (!templateImageUrl) return
+                      setTemplateTestingPdf(true)
+                      try {
+                        const hoje = new Date().toLocaleDateString('pt-BR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                        })
+                        await gerarCertificadoPDF({
+                          templateImageUrl,
+                          camposPosicoes,
+                          nomeColaborador: 'João da Silva',
+                          nomeTreinamento: 'Nome do Treinamento',
+                          cargaHoraria: '40',
+                          dataConclusao: hoje,
+                        })
+                      } catch (error) {
+                        console.error('Erro ao gerar PDF de teste do certificado:', error)
+                        toast.error('Não foi possível gerar o PDF de teste.')
+                      } finally {
+                        setTemplateTestingPdf(false)
+                      }
+                    }}
+                  >
+                    {templateTestingPdf ? 'Gerando PDF...' : 'Testar PDF'}
+                  </Button>
                   <Button
                     type="button"
                     onClick={() => saveTemplatePositions(camposPosicoes)}
