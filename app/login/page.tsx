@@ -16,7 +16,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { createClient } from '@/lib/supabase'
 import { toast } from 'sonner'
 
@@ -46,7 +45,6 @@ function translateAuthError(message: string): string {
 export default function LoginPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
   const [forgotOpen, setForgotOpen] = useState(false)
   const [forgotSubmitting, setForgotSubmitting] = useState(false)
 
@@ -100,24 +98,6 @@ export default function LoginPage() {
     }
   }
 
-  const handleGoogleLogin = async () => {
-    setIsGoogleLoading(true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      })
-      if (error) {
-        toast.error(translateAuthError(error.message))
-      }
-    } finally {
-      setIsGoogleLoading(false)
-    }
-  }
-
   return (
     <main className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Animated gradient mesh background */}
@@ -143,39 +123,7 @@ export default function LoginPage() {
               </p>
             </div>
           </div>
-
-          <Tabs defaultValue="google" className="w-full">
-            <TabsList className="w-full grid grid-cols-2 mb-6 bg-[oklch(1_0_0/0.07)] border border-[oklch(1_0_0/0.15)]">
-              <TabsTrigger
-                value="google"
-                className="data-[state=active]:bg-[#00C9A7] data-[state=active]:text-white data-[state=active]:border-[#00C9A7]"
-              >
-                <LogIn className="w-4 h-4 mr-2" />
-                Google
-              </TabsTrigger>
-              <TabsTrigger
-                value="email"
-                className="data-[state=active]:bg-[#00C9A7] data-[state=active]:text-white data-[state=active]:border-[#00C9A7]"
-              >
-                <Mail className="w-4 h-4 mr-2" />
-                E-mail
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="google">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleGoogleLogin}
-                disabled={isGoogleLoading}
-                className="w-full h-11 border-[oklch(1_0_0/0.2)] bg-[oklch(1_0_0/0.07)] text-white hover:bg-[oklch(1_0_0/0.12)] hover:text-white"
-              >
-                {isGoogleLoading ? 'Carregando...' : 'Entrar com Google'}
-              </Button>
-            </TabsContent>
-
-            <TabsContent value="email">
-              <form
+          <form
                 onSubmit={loginForm.handleSubmit(onLoginSubmit)}
                 className="flex flex-col gap-5"
               >
@@ -297,8 +245,6 @@ export default function LoginPage() {
                   {loginForm.formState.isSubmitting ? 'Entrando...' : 'Entrar'}
                 </Button>
               </form>
-            </TabsContent>
-          </Tabs>
 
           <p className="text-center text-[oklch(0.55_0.02_240)] text-xs mt-6">
             © {new Date().getFullYear()} TrainHub. Todos os direitos reservados.

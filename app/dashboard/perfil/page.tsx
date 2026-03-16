@@ -16,6 +16,24 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
 import { NotificacoesSino } from '@/components/notificacoes-sino'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+import { zodResolver } from '@hookform/resolvers/zod'
+
+const changePasswordSchema = z
+  .object({
+    senhaAtual: z.string().min(1, 'Informe a senha atual'),
+    novaSenha: z.string().min(6, 'A nova senha deve ter ao menos 6 caracteres'),
+    confirmarSenha: z.string().min(1, 'Confirme a nova senha'),
+  })
+  .refine((data) => data.novaSenha === data.confirmarSenha, {
+    message: 'As senhas não coincidem',
+    path: ['confirmarSenha'],
+  })
+
+type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>
 
 export default function PerfilPage() {
   const router = useRouter()
@@ -26,6 +44,15 @@ export default function PerfilPage() {
   const [configLoading, setConfigLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const supabase = createClient()
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<ChangePasswordFormValues>({
+    resolver: zodResolver(changePasswordSchema),
+  })
 
   useEffect(() => {
     if (!user?.id) return
@@ -107,6 +134,13 @@ export default function PerfilPage() {
       </div>
     )
   }
+
+  const isGoogleUser =
+    user.app_metadata?.provider === 'google' ||
+    (Array.isArray(user.identities) &&
+      user.identities.some((i: { provider?: string }) => i.provider === 'google'))
+
+  console.log('provider:', user?.app_metadata?.provider, 'identities:', user?.identities)
 
   return (
     <div className="min-h-screen bg-background">
@@ -240,6 +274,99 @@ export default function PerfilPage() {
               </div>
             )}
           </div>
+
+          {/* Card 3 — Alterar Senha */}
+          {!isGoogleUser && (
+            <Card className="border border-border shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-foreground">
+                  Alterar Senha
+                </CardTitle>
+                <CardDescription className="text-sm text-muted-foreground">
+                  Preencha os campos abaixo para alterar sua senha de acesso.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form
+                  onSubmit={handleSubmit(async (values) => {
+                    if (!user?.email) {
+                      toast.error('E-mail do usuário não disponível.')
+                      return
+                    }
+                    try {
+                      const { error: signInError } = await supabase.auth.signInWithPassword({
+                        email: user.email,
+                        password: values.senhaAtual,
+                      })
+                      if (signInError) {
+                        toast.error('Senha atual incorreta.')
+                        return
+                      }
+
+                      const { error: updateError } = await supabase.auth.updateUser({
+                        password: values.novaSenha,
+                      })
+                      if (updateError) {
+                        toast.error('Erro ao alterar senha. Tente novamente.')
+                        return
+                      }
+
+                      toast.success('Senha alterada com sucesso!')
+                      reset()
+                    } catch (error) {
+                      console.error('Erro ao alterar senha:', error)
+                      toast.error('Erro ao alterar senha. Tente novamente.')
+                    }
+                  })}
+                  className="space-y-4 max-w-md"
+                >
+                  <div className="space-y-1.5">
+                    <Label htmlFor="senhaAtual">Senha Atual</Label>
+                    <Input
+                      id="senhaAtual"
+                      type="password"
+                      autoComplete="current-password"
+                      {...register('senhaAtual')}
+                    />
+                    {errors.senhaAtual && (
+                      <p className="text-xs text-destructive">{errors.senhaAtual.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="novaSenha">Nova Senha</Label>
+                    <Input
+                      id="novaSenha"
+                      type="password"
+                      autoComplete="new-password"
+                      {...register('novaSenha')}
+                    />
+                    {errors.novaSenha && (
+                      <p className="text-xs text-destructive">{errors.novaSenha.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="confirmarSenha">Confirmar Nova Senha</Label>
+                    <Input
+                      id="confirmarSenha"
+                      type="password"
+                      autoComplete="new-password"
+                      {...register('confirmarSenha')}
+                    />
+                    {errors.confirmarSenha && (
+                      <p className="text-xs text-destructive">{errors.confirmarSenha.message}</p>
+                    )}
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="bg-[#00C9A7] hover:bg-[#00C9A7]/90 text-white"
+                  >
+                    {isSubmitting ? 'Alterando...' : 'Alterar Senha'}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </main>
     </div>
