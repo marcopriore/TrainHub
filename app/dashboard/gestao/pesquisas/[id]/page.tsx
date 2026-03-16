@@ -97,15 +97,12 @@ export default function PesquisaIdPage() {
 
   const [formulario, setFormulario] = useState<Formulario | null>(null)
   const [perguntas, setPerguntas] = useState<Pergunta[]>([])
-  const [tokens, setTokens] = useState<TokenRow[]>([])
   const [loading, setLoading] = useState(true)
   const [perguntaDialogOpen, setPerguntaDialogOpen] = useState(false)
   const [editingPergunta, setEditingPergunta] = useState<Pergunta | null>(null)
   const [opcoes, setOpcoes] = useState<string[]>([''])
   const [deletePerguntaDialogOpen, setDeletePerguntaDialogOpen] = useState(false)
   const [perguntaToDelete, setPerguntaToDelete] = useState<Pergunta | null>(null)
-  const [expandedTokenId, setExpandedTokenId] = useState<string | null>(null)
-  const [respostasByToken, setRespostasByToken] = useState<Record<string, { pergunta_texto: string; valor: string }[]>>({})
   const [submitting, setSubmitting] = useState(false)
 
   const { register, control, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<PerguntaFormValues>({
@@ -151,37 +148,10 @@ export default function PesquisaIdPage() {
     setPerguntas((data as Pergunta[]) ?? [])
   }
 
-  const fetchTokens = async () => {
-    if (!id) return
-    const { data, error } = await supabase
-      .from('pesquisa_tokens')
-      .select('id, formulario_id, treinamento_id, usado, respondido_em, criado_em')
-      .eq('formulario_id', id)
-      .order('criado_em', { ascending: false })
-    if (error) {
-      console.error(error)
-      return
-    }
-    setTokens((data as TokenRow[]) ?? [])
-  }
-
-  const fetchRespostasForToken = async (tokenId: string) => {
-    const { data } = await supabase
-      .from('pesquisa_respostas')
-      .select('pergunta_id, valor, pesquisa_perguntas(texto)')
-      .eq('token_id', tokenId)
-    const list = (data ?? []) as { pergunta_id: string; valor: string; pesquisa_perguntas: { texto: string } | null }[]
-    const mapped = list.map((r) => ({
-      pergunta_texto: r.pesquisa_perguntas?.texto ?? '—',
-      valor: r.valor ?? '',
-    }))
-    setRespostasByToken((prev) => ({ ...prev, [tokenId]: mapped }))
-  }
-
   useEffect(() => {
     if (!id || !activeTenantId) return
     setLoading(true)
-    Promise.all([fetchFormulario(), fetchPerguntas(), fetchTokens()]).finally(() => setLoading(false))
+    Promise.all([fetchFormulario(), fetchPerguntas()]).finally(() => setLoading(false))
   }, [id, activeTenantId])
 
   useEffect(() => {
@@ -307,24 +277,6 @@ export default function PesquisaIdPage() {
     }
   }
 
-  const toggleRespostas = (tokenId: string) => {
-    if (expandedTokenId === tokenId) {
-      setExpandedTokenId(null)
-      return
-    }
-    setExpandedTokenId(tokenId)
-    if (!respostasByToken[tokenId]) fetchRespostasForToken(tokenId)
-  }
-
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-
   if (loading || !formulario) {
     return (
       <div className="flex flex-col gap-6">
@@ -399,74 +351,6 @@ export default function PesquisaIdPage() {
               </li>
             ))}
           </ul>
-        )}
-      </div>
-
-      {/* Seção 2 — Respostas recebidas */}
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-        <h2 className="p-4 border-b border-border font-semibold text-foreground">Respostas recebidas</h2>
-        {tokens.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground text-sm">
-            Nenhuma resposta recebida ainda.
-          </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/30 hover:bg-muted/30">
-                <TableHead className="font-medium">Treinamento</TableHead>
-                <TableHead className="font-medium">Data</TableHead>
-                <TableHead className="font-medium">Status</TableHead>
-                <TableHead className="font-medium w-32 text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {tokens.map((t) => (
-                <React.Fragment key={t.id}>
-                  <TableRow>
-                    <TableCell className="text-muted-foreground">
-                      {t.treinamento_id ? String(t.treinamento_id).slice(0, 8) + '…' : '—'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{formatDate(t.criado_em)}</TableCell>
-                    <TableCell>
-                      <span
-                        className={cn(
-                          'px-2 py-0.5 rounded-full text-xs font-medium',
-                          t.usado ? 'bg-green-500/10 text-green-600' : 'bg-muted text-muted-foreground'
-                        )}
-                      >
-                        {t.usado ? 'Respondido' : 'Pendente'}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {t.usado && (
-                        <Button variant="ghost" size="sm" onClick={() => toggleRespostas(t.id)}>
-                          {expandedTokenId === t.id ? 'Ocultar respostas' : 'Ver respostas'}
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                  {expandedTokenId === t.id && t.usado && (
-                    <TableRow key={`${t.id}-expanded`}>
-                      <TableCell colSpan={4} className="bg-muted/20 p-4">
-                        {respostasByToken[t.id] ? (
-                          <ul className="space-y-2 text-sm">
-                            {respostasByToken[t.id].map((r, i) => (
-                              <li key={i} className="flex flex-col gap-0.5">
-                                <span className="text-muted-foreground font-medium">{r.pergunta_texto}</span>
-                                <span className="text-foreground">{r.valor || '—'}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="text-muted-foreground">Carregando...</div>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </React.Fragment>
-              ))}
-            </TableBody>
-          </Table>
         )}
       </div>
 

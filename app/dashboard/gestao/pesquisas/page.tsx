@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Pencil, Trash2, Settings } from 'lucide-react'
+import { Plus, Pencil, Trash2, Settings, BarChart2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@/lib/use-user'
@@ -310,6 +310,17 @@ export default function PesquisasPage() {
                   {canManage && (
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1 flex-wrap">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          asChild
+                          className="gap-1"
+                        >
+                          <Link href={`/dashboard/gestao/pesquisas/${f.id}/respostas`}>
+                            <BarChart2 className="w-4 h-4" />
+                            Ver respostas
+                          </Link>
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
