@@ -8,6 +8,8 @@ import {
   Users,
   Building2,
   ChevronRight,
+  GraduationCap,
+  ChevronLeft,
 } from 'lucide-react'
 import { useUser } from '@/lib/use-user'
 import { NotificacoesSino } from '@/components/notificacoes-sino'
@@ -39,20 +41,20 @@ export default function ConfiguracoesPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="h-16 bg-sidebar flex items-center justify-between px-8 shrink-0">
+      <header className="bg-sidebar h-16 flex items-center justify-between px-6 border-b border-border sticky top-0 z-10">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0 shadow-md shadow-primary/30">
-            <Settings className="w-5 h-5 text-primary-foreground" />
+            <GraduationCap className="w-5 h-5 text-primary-foreground" />
           </div>
-          <span className="font-semibold text-white">
-            Configurações do Hub
+          <span className="font-serif text-xl font-bold text-white tracking-tight">
+            TrainHub
           </span>
-          <span className="text-sidebar-foreground/40">|</span>
           <Link
             href="/dashboard"
-            className="text-sm text-sidebar-foreground/50 hover:text-white transition-colors"
+            className="ml-4 inline-flex items-center gap-1 text-sm text-sidebar-foreground/70 hover:text-white hover:bg-sidebar-accent/40 px-2 py-1 rounded-md transition-colors"
           >
-            ← Home
+            <ChevronLeft className="w-4 h-4" />
+            Voltar
           </Link>
         </div>
         <div className="flex items-center gap-3">

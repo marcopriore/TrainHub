@@ -9,6 +9,9 @@ import {
   PowerOff,
   Building2,
   Pencil,
+  GraduationCap,
+  LogOut,
+  ChevronLeft,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -47,6 +50,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
+import { NotificacoesSino } from '@/components/notificacoes-sino'
 
 interface Tenant {
   id: string
@@ -196,6 +200,15 @@ export default function TenantsPage() {
     )
   }
 
+  const initials = user?.nome
+    ? user.nome
+        .split(/\s+/)
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
+    : '—'
+
   const total = tenants.length
   const ativos = tenants.filter((t) => t.ativo).length
   const inativos = total - ativos
@@ -204,31 +217,65 @@ export default function TenantsPage() {
     format(new Date(dateStr), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="font-serif text-2xl font-bold text-foreground">Tenants</h1>
-            <span className="text-muted-foreground">|</span>
-            <Link
-              href="/dashboard/configuracoes"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 flex items-center gap-1"
-            >
-              ← Configurações
-            </Link>
+    <div className="min-h-screen bg-background flex flex-col gap-0">
+      <header className="bg-sidebar h-16 flex items-center justify-between px-6 border-b border-border sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0 shadow-md shadow-primary/30">
+            <GraduationCap className="w-5 h-5 text-primary-foreground" />
           </div>
-          <p className="text-muted-foreground text-sm mt-1">
-            Gerencie os tenants (clientes) do TrainHub
-          </p>
+          <span className="font-serif text-xl font-bold text-white tracking-tight">
+            TrainHub
+          </span>
+          <Link
+            href="/dashboard/configuracoes"
+            className="ml-4 inline-flex items-center gap-1 text-sm text-sidebar-foreground/70 hover:text-white hover:bg-sidebar-accent/40 px-2 py-1 rounded-md transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Configurações
+          </Link>
         </div>
-        <Button onClick={openNovoSheet} className="w-full sm:w-auto shrink-0">
-          <Plus className="w-4 h-4" />
-          Novo Tenant
-        </Button>
-      </div>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard/perfil"
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-sidebar-accent/40 transition-colors"
+          >
+            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-semibold text-primary">{initials}</span>
+            </div>
+          </Link>
+          <NotificacoesSino variant="compact" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40"
+            onClick={async () => {
+              const { createClient } = await import('@/lib/supabase')
+              const supabase = createClient()
+              await supabase.auth.signOut()
+              window.location.href = '/login'
+            }}
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Sair
+          </Button>
+        </div>
+      </header>
+      <div className="flex flex-col gap-6 px-6 py-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="font-serif text-2xl font-bold text-foreground">Tenants</h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Gerencie os tenants (clientes) do TrainHub
+            </p>
+          </div>
+          <Button onClick={openNovoSheet} className="w-full sm:w-auto shrink-0">
+            <Plus className="w-4 h-4" />
+            Novo Tenant
+          </Button>
+        </div>
 
-      {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+        {/* KPI Cards */}
+        <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Tenants</CardTitle>
@@ -256,10 +303,10 @@ export default function TenantsPage() {
             {loading ? <Skeleton className="h-8 w-16" /> : <span className="text-2xl font-bold text-muted-foreground">{inativos}</span>}
           </CardContent>
         </Card>
-      </div>
+        </div>
 
-      {/* Table */}
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        {/* Table */}
+        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
         {loading ? (
           <div className="p-6 space-y-4">
             {[1, 2, 3, 4].map((i) => (
@@ -318,9 +365,9 @@ export default function TenantsPage() {
             </TableBody>
           </Table>
         )}
-      </div>
+        </div>
 
-      {/* Sheet Novo Tenant */}
+        {/* Sheet Novo Tenant */}
       <Sheet open={sheetOpen} onOpenChange={(open) => !open && closeSheet()}>
         <SheetContent side="right" className="sm:max-w-lg overflow-y-auto">
           <SheetHeader>
@@ -382,6 +429,7 @@ export default function TenantsPage() {
           </form>
         </SheetContent>
       </Sheet>
+      </div>
     </div>
   )
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, Shield, ClipboardList, BookOpen } from 'lucide-react'
+import { Plus, Pencil, Trash2, Shield, ClipboardList, BookOpen, GraduationCap, LogOut, ChevronLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@/lib/use-user'
@@ -38,6 +38,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { NotificacoesSino } from '@/components/notificacoes-sino'
 
 const ICON_MAP = {
   Shield,
@@ -390,27 +391,71 @@ export default function PerfisPage() {
     return perms.length > 0 ? perms.length + ' permissões' : 'Nenhuma'
   }
 
+  const initials = user?.nome
+    ? user.nome
+        .split(/\s+/)
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
+    : '—'
+
   if (!activeTenantId) {
     return (
-      <div className="flex flex-col gap-6">
-        <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="font-serif text-2xl font-bold text-foreground">Perfil de Acesso</h1>
-            <span className="text-muted-foreground">|</span>
+      <div className="min-h-screen bg-background flex flex-col">
+        <header className="bg-sidebar h-16 flex items-center justify-between px-6 border-b border-border sticky top-0 z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0 shadow-md shadow-primary/30">
+              <GraduationCap className="w-5 h-5 text-primary-foreground" />
+            </div>
+            <span className="font-serif text-xl font-bold text-white tracking-tight">
+              TrainHub
+            </span>
             <Link
               href="/dashboard/configuracoes"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 flex items-center gap-1"
+              className="ml-4 inline-flex items-center gap-1 text-sm text-sidebar-foreground/70 hover:text-white hover:bg-sidebar-accent/40 px-2 py-1 rounded-md transition-colors"
             >
-              ← Configurações
+              <ChevronLeft className="w-4 h-4" />
+              Configurações
             </Link>
           </div>
-          <p className="text-muted-foreground text-sm mt-1">
-            Selecione um tenant para gerenciar os perfis de acesso
-          </p>
-        </div>
-        <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">
-          Selecione um tenant no menu lateral para continuar.
-        </div>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/dashboard/perfil"
+              className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-sidebar-accent/40 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-semibold text-primary">{initials}</span>
+              </div>
+            </Link>
+            <NotificacoesSino variant="compact" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40"
+              onClick={async () => {
+                const { createClient } = await import('@/lib/supabase')
+                const supabase = createClient()
+                await supabase.auth.signOut()
+                window.location.href = '/login'
+              }}
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sair
+            </Button>
+          </div>
+        </header>
+        <main className="flex-1 flex flex-col gap-6 px-6 py-8">
+          <div>
+            <h1 className="font-serif text-2xl font-bold text-foreground">Perfil de Acesso</h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Selecione um tenant para gerenciar os perfis de acesso
+            </p>
+          </div>
+          <div className="bg-card rounded-xl border border-border p-12 text-center text-muted-foreground">
+            Selecione um tenant no menu lateral para continuar.
+          </div>
+        </main>
       </div>
     )
   }
@@ -418,108 +463,143 @@ export default function PerfisPage() {
   const canManage = user?.isMaster() || user?.isAdmin?.()
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="font-serif text-2xl font-bold text-foreground">Perfil de Acesso</h1>
-            <span className="text-muted-foreground">|</span>
-            <Link
-              href="/dashboard/configuracoes"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 flex items-center gap-1"
-            >
-              ← Configurações
-            </Link>
+    <div className="min-h-screen bg-background flex flex-col">
+      <header className="bg-sidebar h-16 flex items-center justify-between px-6 border-b border-border sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0 shadow-md shadow-primary/30">
+            <GraduationCap className="w-5 h-5 text-primary-foreground" />
           </div>
-          <p className="text-muted-foreground text-sm mt-1">
-            Crie perfis e defina o que cada um pode fazer na plataforma
-          </p>
+          <span className="font-serif text-xl font-bold text-white tracking-tight">
+            TrainHub
+          </span>
+          <Link
+            href="/dashboard/configuracoes"
+            className="ml-4 inline-flex items-center gap-1 text-sm text-sidebar-foreground/70 hover:text-white hover:bg-sidebar-accent/40 px-2 py-1 rounded-md transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Configurações
+          </Link>
         </div>
-        {canManage && (
-          <Button onClick={openNewDialog} className="w-full sm:w-auto shrink-0">
-            <Plus className="w-4 h-4" />
-            Novo Perfil
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard/perfil"
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-sidebar-accent/40 transition-colors"
+          >
+            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-semibold text-primary">{initials}</span>
+            </div>
+          </Link>
+          <NotificacoesSino variant="compact" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40"
+            onClick={async () => {
+              const { createClient } = await import('@/lib/supabase')
+              const supabase = createClient()
+              await supabase.auth.signOut()
+              window.location.href = '/login'
+            }}
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Sair
           </Button>
-        )}
-      </div>
+        </div>
+      </header>
 
-      {loading ? (
-        <Skeleton className="h-[200px] w-full rounded-xl" />
-      ) : perfis.length === 0 ? (
-        <div className="bg-card rounded-xl border border-border p-12 text-center">
-          <Shield className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-          <p className="text-muted-foreground mb-4">
-            Nenhum perfil cadastrado. Crie um perfil para atribuir permissões aos usuários.
-          </p>
+      <main className="flex-1 flex flex-col gap-6 px-6 py-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="font-serif text-2xl font-bold text-foreground">Perfil de Acesso</h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Crie perfis e defina o que cada um pode fazer na plataforma
+            </p>
+          </div>
           {canManage && (
-            <Button onClick={openNewDialog}>
+            <Button onClick={openNewDialog} className="w-full sm:w-auto shrink-0">
               <Plus className="w-4 h-4" />
               Novo Perfil
             </Button>
           )}
         </div>
-      ) : (
-        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/30 hover:bg-muted/30">
-                <TableHead className="font-medium">Nome</TableHead>
-                <TableHead className="font-medium">Permissões</TableHead>
-                {canManage && (
-                  <TableHead className="font-medium text-right w-24">Ações</TableHead>
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {perfis.map((perfil) => (
-                <TableRow key={perfil.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {perfil.is_admin && (
-                        <span className="text-xs font-medium px-2 py-0.5 rounded bg-primary/10 text-primary">
-                          Admin
-                        </span>
-                      )}
-                      <span className="font-medium">{perfil.nome}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {getPermissoesLabel(perfil)}
-                  </TableCell>
+
+        {loading ? (
+          <Skeleton className="h-[200px] w-full rounded-xl" />
+        ) : perfis.length === 0 ? (
+          <div className="bg-card rounded-xl border border-border p-12 text-center">
+            <Shield className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+            <p className="text-muted-foreground mb-4">
+              Nenhum perfil cadastrado. Crie um perfil para atribuir permissões aos usuários.
+            </p>
+            {canManage && (
+              <Button onClick={openNewDialog}>
+                <Plus className="w-4 h-4" />
+                Novo Perfil
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <TableHead className="font-medium">Nome</TableHead>
+                  <TableHead className="font-medium">Permissões</TableHead>
                   {canManage && (
-                    <TableCell className="text-right">
-                      {!perfil.is_admin && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => openEditDialog(perfil)}
-                            aria-label="Editar"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => openDeleteDialog(perfil)}
-                            aria-label="Excluir"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </>
-                      )}
-                    </TableCell>
+                    <TableHead className="font-medium text-right w-24">Ações</TableHead>
                   )}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+              </TableHeader>
+              <TableBody>
+                {perfis.map((perfil) => (
+                  <TableRow key={perfil.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {perfil.is_admin && (
+                          <span className="text-xs font-medium px-2 py-0.5 rounded bg-primary/10 text-primary">
+                            Admin
+                          </span>
+                        )}
+                        <span className="font-medium">{perfil.nome}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {getPermissoesLabel(perfil)}
+                    </TableCell>
+                    {canManage && (
+                      <TableCell className="text-right">
+                        {!perfil.is_admin && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => openEditDialog(perfil)}
+                              aria-label="Editar"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={() => openDeleteDialog(perfil)}
+                              aria-label="Excluir"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
@@ -676,6 +756,7 @@ export default function PerfisPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </main>
     </div>
   )
 }

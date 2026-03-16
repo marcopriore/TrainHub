@@ -10,7 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
 import { Building2 } from 'lucide-react'
 
 interface TenantItem {
@@ -48,44 +47,28 @@ export function TenantSelector() {
 
   if (!user?.isMaster()) return null
 
-  const isViewingOwnTenant =
-    user.tenant && selectedTenant && user.tenant.id === selectedTenant.id
-
   return (
-    <div className="px-4 py-3 border-b border-sidebar-border space-y-2">
-      <label className="text-xs font-medium text-sidebar-foreground/60 uppercase tracking-wide">
-        Tenant
-      </label>
-      <Select
-        value={selectedTenant?.id ?? ''}
-        onValueChange={(id) => {
-          const t = tenants.find((x) => x.id === id) ?? null
-          setSelectedTenant(t)
-        }}
-        disabled={loading}
-      >
-        <SelectTrigger className="w-full bg-sidebar-accent/20 border-sidebar-border text-white h-9">
-          <SelectValue placeholder={loading ? 'Carregando...' : 'Selecione o tenant'} />
-        </SelectTrigger>
-        <SelectContent>
-          {tenants.map((t) => (
-            <SelectItem key={t.id} value={t.id}>
-              <span className="flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-[#00C9A7]" />
-                {t.nome}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {selectedTenant && !isViewingOwnTenant && (
-        <Badge
-          variant="secondary"
-          className="w-full justify-center bg-[#00C9A7]/20 text-[#00C9A7] border-[#00C9A7]/30"
-        >
-          Visualizando: {selectedTenant.nome}
-        </Badge>
-      )}
-    </div>
+    <Select
+      value={selectedTenant?.id ?? ''}
+      onValueChange={(id) => {
+        const t = tenants.find((x) => x.id === id) ?? null
+        setSelectedTenant(t)
+      }}
+      disabled={loading}
+    >
+      <SelectTrigger className="w-full bg-sidebar-accent/20 border-sidebar-border text-white h-9">
+        <SelectValue placeholder={loading ? 'Carregando...' : 'Selecione o tenant'} />
+      </SelectTrigger>
+      <SelectContent>
+        {tenants.map((t) => (
+          <SelectItem key={t.id} value={t.id}>
+            <span className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-[#00C9A7]" />
+              {t.nome}
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
