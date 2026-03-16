@@ -69,7 +69,12 @@ export default function GestaoLayout({ children }: { children: React.ReactNode }
     return <>{children}</>
   }
 
+  const semSidebar = pathname?.includes('/minhas-trilhas')
+
   if (user.isMaster()) {
+    if (semSidebar) {
+      return <>{children}</>
+    }
     return <AppShell>{children}</AppShell>
   }
 
@@ -84,6 +89,10 @@ export default function GestaoLayout({ children }: { children: React.ReactNode }
 
   if (!hasAccess) {
     return null
+  }
+
+  if (semSidebar) {
+    return <>{children}</>
   }
 
   return <AppShell>{children}</AppShell>

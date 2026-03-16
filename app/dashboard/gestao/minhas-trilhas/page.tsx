@@ -1,12 +1,25 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@/lib/use-user'
-import { BookOpen, Clock, CalendarClock, Award, Building2, Calendar, UserCircle2 } from 'lucide-react'
+import {
+  BookOpen,
+  Clock,
+  CalendarClock,
+  Award,
+  Download,
+  UserCircle2,
+  GraduationCap,
+  LogOut,
+  ChevronLeft,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
+import { NotificacoesSino } from '@/components/notificacoes-sino'
 import {
   Table,
   TableBody,
@@ -43,6 +56,7 @@ function formatDate(dateStr: string | null) {
 }
 
 export default function MinhasTrilhasPage() {
+  const router = useRouter()
   const { user, getActiveTenantId } = useUser()
   const activeTenantId = getActiveTenantId()
 
@@ -155,18 +169,70 @@ export default function MinhasTrilhasPage() {
       }
     }, [treinamentos])
 
-  return (
-    <div className="flex flex-col gap-8">
-      {/* Header */}
-      <div>
-        <h1 className="font-serif text-2xl font-bold text-foreground">Minhas Trilhas</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Acompanhe sua jornada de aprendizado
-        </p>
-      </div>
+  const initials = user?.nome
+    ? user.nome
+        .split(/\s+/)
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase()
+    : '—'
 
-      {/* Seção 1 — Cards de Progresso */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      <header className="bg-sidebar h-16 flex items-center justify-between px-6 shrink-0 border-b border-border sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center flex-shrink-0 shadow-md shadow-primary/30">
+            <GraduationCap className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <span className="font-serif text-xl font-bold text-white tracking-tight">
+            TrainHub
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-sidebar-foreground/70 hover:text-white hover:bg-sidebar-accent/40"
+            onClick={() => router.push('/dashboard')}
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" />
+            Voltar aos Módulos
+          </Button>
+          <NotificacoesSino variant="compact" />
+          <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-sidebar-accent/40 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-semibold text-primary">{initials}</span>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40"
+            onClick={async () => {
+              const { createClient } = await import('@/lib/supabase')
+              const supabase = createClient()
+              await supabase.auth.signOut()
+              window.location.href = '/login'
+            }}
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Sair
+          </Button>
+        </div>
+      </header>
+
+      <main className="flex-1 flex flex-col gap-8 px-6 py-8">
+        {/* Header local da página */}
+        <div>
+          <h1 className="font-serif text-2xl font-bold text-foreground">Minhas Trilhas</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Acompanhe sua jornada de aprendizado
+          </p>
+        </div>
+
+        {/* Seção 1 — Cards de Progresso */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {loading ? (
           <>
             {[1, 2, 3].map((i) => (
@@ -221,10 +287,10 @@ export default function MinhasTrilhasPage() {
             </div>
           </>
         )}
-      </div>
+        </div>
 
-      {/* Seção 2 — Treinamentos Realizados */}
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        {/* Seção 2 — Treinamentos Realizados */}
+        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
         <div className="p-4 border-b border-border flex items-center justify-between">
           <h2 className="font-semibold text-foreground">Treinamentos Realizados</h2>
         </div>
@@ -253,58 +319,51 @@ export default function MinhasTrilhasPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30">
-                <TableHead className="font-medium">Código</TableHead>
+                <TableHead className="font-medium text-center">Código</TableHead>
                 <TableHead className="font-medium">Nome</TableHead>
                 <TableHead className="font-medium">Empresa Parceira</TableHead>
-                <TableHead className="font-medium text-right">Carga Horária</TableHead>
-                <TableHead className="font-medium">Data</TableHead>
-                <TableHead className="font-medium">Tipo</TableHead>
+                <TableHead className="font-medium text-center">Carga Horária</TableHead>
+                <TableHead className="font-medium text-center">Data</TableHead>
+                <TableHead className="font-medium text-center">Certificado</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {treinamentos.map((t) => {
-                const tipo = (t.tipo ?? 'colaborador') as TipoTreinamento
-                const label = tipoLabel[tipo] ?? t.tipo
-                const isColaborador = tipo === 'colaborador'
-                return (
-                  <TableRow key={t.id}>
-                    <TableCell>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {t.codigo ?? '—'}
-                      </span>
-                    </TableCell>
-                    <TableCell className="font-medium text-foreground">{t.nome}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {t.empresas_parceiras?.nome ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {t.carga_horaria ?? 0}h
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDate(t.data_treinamento)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={
-                          isColaborador
-                            ? 'border-blue-500/40 text-blue-600 bg-blue-500/5'
-                            : 'border-muted-foreground/40 text-muted-foreground bg-muted/30'
-                        }
-                      >
-                        {label}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
+              {treinamentos.map((t) => (
+                <TableRow key={t.id}>
+                  <TableCell className="text-center">
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {t.codigo ?? '—'}
+                    </span>
+                  </TableCell>
+                  <TableCell className="font-medium text-foreground">{t.nome}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {t.empresas_parceiras?.nome ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground">
+                    {t.carga_horaria ?? 0}h
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground">
+                    {formatDate(t.data_treinamento)}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground bg-muted cursor-not-allowed"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Baixar
+                    </button>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         )}
-      </div>
+        </div>
 
-      {/* Seção 3 — Próximos Treinamentos (Em breve) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Seção 3 — Próximos Treinamentos (Em breve) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-card rounded-xl border border-dashed border-border/70 shadow-sm p-5 flex flex-col gap-3 opacity-70">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -324,7 +383,7 @@ export default function MinhasTrilhasPage() {
           </div>
         </div>
 
-        {/* Seção 4 — Certificados (Em breve) */}
+          {/* Seção 4 — Certificados (Em breve) */}
         <div className="bg-card rounded-xl border border-dashed border-border/70 shadow-sm p-5 flex flex-col gap-3 opacity-70">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -342,8 +401,9 @@ export default function MinhasTrilhasPage() {
               Em breve
             </Badge>
           </div>
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   )
 }
