@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { PlusCircle, Trash2, Building2, Users, FileSpreadsheet, Lock } from 'lucide-react'
+import Link from 'next/link'
+import { PlusCircle, Trash2, Building2, Users, FileSpreadsheet, Lock, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@/lib/use-user'
@@ -21,7 +22,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { TreinamentoImportDialog } from '@/components/treinamento-import-dialog'
+import { cn } from '@/lib/utils'
 
 // ---------- Schemas ----------
 const baseSchema = z.object({
@@ -63,8 +72,22 @@ interface EmpresaParceira {
 interface ColaboradorWithSetor {
   id: string
   nome: string
+  email: string | null
   setor_id: string | null
   setores?: { nome: string } | null
+}
+
+interface CatalogoItem {
+  id: string
+  titulo: string
+  objetivo: string | null
+  conteudo_programatico: string | null
+  carga_horaria: number | null
+}
+
+interface FormularioPesquisa {
+  id: string
+  nome: string
 }
 
 // ---------- Shared Components ----------
@@ -110,6 +133,8 @@ export default function NovoTreinamentoPage() {
   const [treinamentosExistentes, setTreinamentosExistentes] = useState<
     { nome: string; data_treinamento: string }[]
   >([])
+  const [catalogoItems, setCatalogoItems] = useState<CatalogoItem[]>([])
+  const [formulariosPesquisa, setFormulariosPesquisa] = useState<FormularioPesquisa[]>([])
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const supabase = createClient()
 
@@ -128,7 +153,7 @@ export default function NovoTreinamentoPage() {
     }
     const loadData = async () => {
       try {
-        const [empRes, colRes] = await Promise.all([
+        const [empRes, colRes, catRes, formRes] = await Promise.all([
           supabase
             .from('empresas_parceiras')
             .select('id, nome')
@@ -136,14 +161,30 @@ export default function NovoTreinamentoPage() {
             .order('nome', { ascending: true }),
           supabase
             .from('colaboradores')
-            .select('id, nome, setor_id')
+            .select('id, nome, email, setor_id')
             .eq('tenant_id', activeTenantId)
             .order('nome'),
+          supabase
+            .from('catalogo_treinamentos')
+            .select('id, titulo, objetivo, conteudo_programatico, carga_horaria')
+            .eq('tenant_id', activeTenantId)
+            .eq('status', 'ativo')
+            .order('titulo', { ascending: true }),
+          supabase
+            .from('pesquisa_formularios')
+            .select('id, nome')
+            .eq('tenant_id', activeTenantId)
+            .eq('ativo', true)
+            .order('nome', { ascending: true }),
         ])
         if (empRes.error) throw empRes.error
         if (colRes.error) throw colRes.error
+        if (catRes.error) throw catRes.error
+        if (formRes.error) throw formRes.error
         setEmpresas(empRes.data ?? [])
         setColaboradores((colRes.data as ColaboradorWithSetor[]) ?? [])
+        setCatalogoItems((catRes.data as CatalogoItem[]) ?? [])
+        setFormulariosPesquisa((formRes.data as FormularioPesquisa[]) ?? [])
       } catch (error) {
         console.error('Erro ao carregar dados:', error)
         toast.error('Não foi possível carregar os dados. Tente novamente.')
@@ -250,6 +291,8 @@ export default function NovoTreinamentoPage() {
         <TabsContent value="parceiro" className="mt-6">
           <ParceiroForm
             empresas={empresas}
+            catalogoItems={catalogoItems}
+            formulariosPesquisa={formulariosPesquisa}
             tenantId={activeTenantId}
             onSuccess={() => {
               toast.success('Treinamento salvo com sucesso.')
@@ -264,6 +307,8 @@ export default function NovoTreinamentoPage() {
           <ColaboradorForm
             empresas={empresas}
             colaboradores={colaboradores}
+            catalogoItems={catalogoItems}
+            formulariosPesquisa={formulariosPesquisa}
             tenantId={activeTenantId}
             formatColaboradorLabel={formatColaboradorLabel}
             isColaboradorLimited={isColaboradorLimited}
@@ -353,17 +398,28 @@ export default function NovoTreinamentoPage() {
 // ---------- Parceiro Form ----------
 function ParceiroForm({
   empresas,
+  catalogoItems,
+  formulariosPesquisa,
   tenantId,
   onSuccess,
 }: {
   empresas: EmpresaParceira[]
+  catalogoItems: CatalogoItem[]
+  formulariosPesquisa: FormularioPesquisa[]
   tenantId: string | null
   onSuccess: () => void
 }) {
+  const [catalogoItemSelecionado, setCatalogoItemSelecionado] = useState<string | null>(null)
+  const [modoSatisfacao, setModoSatisfacao] = useState<'manual' | 'pesquisa'>('manual')
+  const [formularioSelecionado, setFormularioSelecionado] = useState<string | null>(null)
+  const [linksDialogOpen, setLinksDialogOpen] = useState(false)
+  const [linksGerados, setLinksGerados] = useState<{ token: string; respondente_nome: string | null }[]>([])
+
   const {
     register,
     handleSubmit,
     control,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<ParceiroForm>({
     resolver: zodResolver(parceiroSchema),
@@ -376,6 +432,7 @@ function ParceiroForm({
       return
     }
     const supabase = createClient()
+    const usarPesquisa = modoSatisfacao === 'pesquisa' && !!formularioSelecionado
     try {
       const { data: row, error } = await supabase
         .from('treinamentos')
@@ -388,7 +445,7 @@ function ParceiroForm({
           empresa_parceira_id: data.empresaParceiraId,
           quantidade_pessoas: data.quantidadePessoas,
           data_treinamento: data.dataTreinamento,
-          indice_satisfacao: data.indiceSatisfacao,
+          indice_satisfacao: usarPesquisa ? null : data.indiceSatisfacao,
           indice_aprovacao: data.indiceAprovacao,
           tenant_id: tenantId,
         })
@@ -396,11 +453,48 @@ function ParceiroForm({
         .single()
 
       if (error) throw error
-      onSuccess()
+      const novoTreinamentoId = (row as { id: string }).id
+
+      let abriuDialog = false
+      if (usarPesquisa && formularioSelecionado) {
+        try {
+          const token = crypto.randomUUID()
+          const { error: tokenError } = await supabase.from('pesquisa_tokens').insert({
+            tenant_id: tenantId,
+            treinamento_id: novoTreinamentoId,
+            formulario_id: formularioSelecionado,
+            token,
+            respondente_nome: null,
+            respondente_email: null,
+            respondente_tipo: 'parceiro',
+          })
+          if (tokenError) throw tokenError
+          setLinksGerados([{ token, respondente_nome: null }])
+          setLinksDialogOpen(true)
+          abriuDialog = true
+        } catch (tokenErr) {
+          console.error('Erro ao gerar link de pesquisa:', tokenErr)
+          toast.error('Treinamento salvo, mas não foi possível gerar o link de pesquisa.')
+        }
+      }
+
+      if (!abriuDialog) onSuccess()
     } catch (error) {
       console.error('Erro ao salvar treinamento:', error)
       toast.error('Não foi possível salvar o treinamento. Tente novamente.')
     }
+  }
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+
+  const copyLink = (token: string) => {
+    const url = `${origin}/pesquisa/${token}`
+    navigator.clipboard.writeText(url).then(() => toast.success('Link copiado.'))
+  }
+
+  const copyAllLinks = () => {
+    const urls = linksGerados.map((l) => `${origin}/pesquisa/${l.token}`).join('\n')
+    navigator.clipboard.writeText(urls).then(() => toast.success('Todos os links copiados.'))
   }
 
   return (
@@ -409,23 +503,71 @@ function ParceiroForm({
       className="bg-card rounded-xl border border-border shadow-sm p-6 flex flex-col gap-5"
     >
       <FormField label="Nome do Treinamento" error={errors.nome?.message}>
-        <Input placeholder="Ex.: Gestão de Projetos Ágeis" {...register('nome')} />
+        <Controller
+          control={control}
+          name="nome"
+          render={({ field }) => (
+            <Select
+              value={catalogoItemSelecionado ?? (catalogoItems.find((i) => i.titulo === field.value)?.id ?? '')}
+              onValueChange={(value) => {
+                const item = catalogoItems.find((i) => i.id === value)
+                if (item) {
+                  setCatalogoItemSelecionado(item.id)
+                  field.onChange(item.titulo)
+                  setValue('objetivo', item.objetivo ?? '')
+                  setValue('conteudo', item.conteudo_programatico ?? '')
+                  setValue('cargaHoraria', item.carga_horaria ?? 0)
+                } else {
+                  setCatalogoItemSelecionado(null)
+                }
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Selecione do catálogo ou digite abaixo" />
+              </SelectTrigger>
+              <SelectContent>
+                {catalogoItems.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>
+                    {i.titulo}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        />
+        {catalogoItems.length === 0 && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Nenhum item ativo no catálogo. <Link href="/dashboard/gestao/catalogo" className="text-primary underline">Catálogo</Link>
+          </p>
+        )}
       </FormField>
 
       <FormField label="Conteúdo Programático" error={errors.conteudo?.message}>
-        <Textarea
-          placeholder="Descreva os temas e módulos abordados..."
-          className="min-h-[80px] resize-y"
-          {...register('conteudo')}
-        />
+        <div className="relative">
+          <Textarea
+            placeholder="Descreva os temas e módulos abordados..."
+            className={cn('min-h-[80px] resize-y', catalogoItemSelecionado && 'pr-10')}
+            disabled={!!catalogoItemSelecionado}
+            {...register('conteudo')}
+          />
+          {catalogoItemSelecionado && (
+            <Lock className="absolute right-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
+          )}
+        </div>
       </FormField>
 
       <FormField label="Objetivo" error={errors.objetivo?.message}>
-        <Textarea
-          placeholder="Qual o objetivo deste treinamento?"
-          className="min-h-[80px] resize-y"
-          {...register('objetivo')}
-        />
+        <div className="relative">
+          <Textarea
+            placeholder="Qual o objetivo deste treinamento?"
+            className={cn('min-h-[80px] resize-y', catalogoItemSelecionado && 'pr-10')}
+            disabled={!!catalogoItemSelecionado}
+            {...register('objetivo')}
+          />
+          {catalogoItemSelecionado && (
+            <Lock className="absolute right-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
+          )}
+        </div>
       </FormField>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -436,9 +578,13 @@ function ParceiroForm({
               min={0}
               step={0.5}
               placeholder="0"
-              className="pr-14"
+              className={cn('pr-14', catalogoItemSelecionado && 'pr-10')}
+              disabled={!!catalogoItemSelecionado}
               {...register('cargaHoraria')}
             />
+            {catalogoItemSelecionado && (
+              <Lock className="absolute right-10 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            )}
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
               horas
             </span>
@@ -481,46 +627,168 @@ function ParceiroForm({
         </FormField>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <FormField label="Índice de Satisfação (%)" error={errors.indiceSatisfacao?.message}>
-          <div className="relative">
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              placeholder="0"
-              className="pr-8"
-              {...register('indiceSatisfacao')}
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-              %
-            </span>
+      <div className="space-y-3">
+        <Label className="text-sm font-medium text-foreground">Índice de Satisfação</Label>
+        <div className="flex rounded-lg border border-border overflow-hidden">
+          <button
+            type="button"
+            onClick={() => { setModoSatisfacao('manual'); setFormularioSelecionado(null) }}
+            className={cn(
+              'flex-1 px-3 py-2 text-sm font-medium transition-colors',
+              modoSatisfacao === 'manual'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-background text-muted-foreground hover:bg-muted'
+            )}
+          >
+            Manual
+          </button>
+          <button
+            type="button"
+            onClick={() => { setModoSatisfacao('pesquisa'); setValue('indiceSatisfacao', 0) }}
+            className={cn(
+              'flex-1 px-3 py-2 text-sm font-medium transition-colors',
+              modoSatisfacao === 'pesquisa'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-background text-muted-foreground hover:bg-muted'
+            )}
+          >
+            Via Pesquisa
+          </button>
+        </div>
+        {modoSatisfacao === 'manual' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <FormField label="Índice de Satisfação (%)" error={errors.indiceSatisfacao?.message}>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  placeholder="0"
+                  className="pr-8"
+                  {...register('indiceSatisfacao')}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                  %
+                </span>
+              </div>
+            </FormField>
+            <FormField label="Índice de Aprovação (%)" error={errors.indiceAprovacao?.message}>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  placeholder="0"
+                  className="pr-8"
+                  {...register('indiceAprovacao')}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                  %
+                </span>
+              </div>
+            </FormField>
           </div>
-        </FormField>
-        <FormField label="Índice de Aprovação (%)" error={errors.indiceAprovacao?.message}>
-          <div className="relative">
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              placeholder="0"
-              className="pr-8"
-              {...register('indiceAprovacao')}
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-              %
-            </span>
+        )}
+        {modoSatisfacao === 'pesquisa' && (
+          <div className="space-y-2">
+            {formulariosPesquisa.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhum formulário de pesquisa ativo. Crie um em{' '}
+                <Link href="/dashboard/gestao/pesquisas" className="text-[#00C9A7] underline">
+                  Pesquisas
+                </Link>
+                .
+              </p>
+            ) : (
+              <FormField label="Formulário de pesquisa">
+                <Select
+                  value={formularioSelecionado ?? ''}
+                  onValueChange={(v) => setFormularioSelecionado(v || null)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecione o formulário" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {formulariosPesquisa.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>
+                        {f.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div />
+              <FormField label="Índice de Aprovação (%)" error={errors.indiceAprovacao?.message}>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    placeholder="0"
+                    className="pr-8"
+                    {...register('indiceAprovacao')}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                    %
+                  </span>
+                </div>
+              </FormField>
+            </div>
           </div>
-        </FormField>
+        )}
       </div>
 
       <Button
         type="submit"
-        disabled={isSubmitting}
+        disabled={isSubmitting || (modoSatisfacao === 'pesquisa' && !formularioSelecionado && formulariosPesquisa.length > 0)}
         className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-base shadow-lg shadow-primary/20 transition-all"
       >
         {isSubmitting ? 'Salvando...' : 'Salvar Treinamento'}
       </Button>
+
+      <Dialog open={linksDialogOpen} onOpenChange={setLinksDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-serif">Links de pesquisa gerados</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {linksGerados.map((l) => (
+              <div
+                key={l.token}
+                className="flex items-center gap-2 p-2 rounded-lg border bg-muted/30"
+              >
+                <span className="flex-1 truncate text-sm">
+                  {l.respondente_nome ? `${l.respondente_nome}: ` : ''}
+                  {origin}/pesquisa/{l.token}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => copyLink(l.token)}
+                  aria-label="Copiar link"
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={copyAllLinks}>
+              Copiar todos os links
+            </Button>
+            <Button
+              type="button"
+              className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
+              onClick={() => { setLinksDialogOpen(false); onSuccess() }}
+            >
+              Fechar e continuar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </form>
   )
 }
@@ -529,6 +797,8 @@ function ParceiroForm({
 function ColaboradorForm({
   empresas,
   colaboradores,
+  catalogoItems,
+  formulariosPesquisa,
   tenantId,
   formatColaboradorLabel,
   isColaboradorLimited,
@@ -537,16 +807,25 @@ function ColaboradorForm({
 }: {
   empresas: EmpresaParceira[]
   colaboradores: ColaboradorWithSetor[]
+  catalogoItems: CatalogoItem[]
+  formulariosPesquisa: FormularioPesquisa[]
   tenantId: string | null
   formatColaboradorLabel: (c: ColaboradorWithSetor) => string
   isColaboradorLimited: boolean
   colaboradorLogado: { id: string; nome: string } | null
   onSuccess: () => void
 }) {
+  const [catalogoItemSelecionado, setCatalogoItemSelecionado] = useState<string | null>(null)
+  const [modoSatisfacao, setModoSatisfacao] = useState<'manual' | 'pesquisa'>('manual')
+  const [formularioSelecionado, setFormularioSelecionado] = useState<string | null>(null)
+  const [linksDialogOpen, setLinksDialogOpen] = useState(false)
+  const [linksGerados, setLinksGerados] = useState<{ token: string; respondente_nome: string | null }[]>([])
+
   const {
     register,
     handleSubmit,
     control,
+    setValue,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<ColaboradorForm>({
@@ -573,6 +852,7 @@ function ColaboradorForm({
       return
     }
     const supabase = createClient()
+    const usarPesquisa = modoSatisfacao === 'pesquisa' && !!formularioSelecionado
     try {
       const { data: treinamento, error: err1 } = await supabase
         .from('treinamentos')
@@ -585,7 +865,7 @@ function ColaboradorForm({
           empresa_parceira_id: data.empresaParceiraId,
           quantidade_pessoas: null,
           data_treinamento: data.dataTreinamento,
-          indice_satisfacao: data.indiceSatisfacao,
+          indice_satisfacao: usarPesquisa ? null : data.indiceSatisfacao,
           indice_aprovacao: data.indiceAprovacao,
           tenant_id: tenantId,
         })
@@ -594,12 +874,13 @@ function ColaboradorForm({
 
       if (err1) throw err1
       if (!treinamento?.id) throw new Error('Falha ao criar treinamento')
+      const novoTreinamentoId = (treinamento as { id: string }).id
 
       const colaboradorIds = data.colaboradores
         .map((c) => c.colaboradorId?.trim())
         .filter((id): id is string => !!id)
       const inserts = colaboradorIds.map((colaborador_id) => ({
-        treinamento_id: treinamento.id,
+        treinamento_id: novoTreinamentoId,
         colaborador_id,
         tenant_id: tenantId,
       }))
@@ -625,7 +906,49 @@ function ColaboradorForm({
           console.warn('Falha ao disparar notificações:', e)
         }
       }
-      onSuccess()
+
+      let abriuDialog = false
+      if (usarPesquisa && formularioSelecionado) {
+        try {
+          if (colaboradorIds.length > 0) {
+            const tokenRows = colaboradorIds.map((colaboradorId) => {
+              const col = colaboradores.find((c) => c.id === colaboradorId)
+              return {
+                tenant_id: tenantId,
+                treinamento_id: novoTreinamentoId,
+                formulario_id: formularioSelecionado,
+                token: crypto.randomUUID(),
+                respondente_nome: col?.nome ?? null,
+                respondente_email: col?.email ?? null,
+                respondente_tipo: 'colaborador' as const,
+              }
+            })
+            const { error: tokenError } = await supabase.from('pesquisa_tokens').insert(tokenRows)
+            if (tokenError) throw tokenError
+            setLinksGerados(tokenRows.map((r) => ({ token: r.token, respondente_nome: r.respondente_nome })))
+          } else {
+            const token = crypto.randomUUID()
+            const { error: tokenError } = await supabase.from('pesquisa_tokens').insert({
+              tenant_id: tenantId,
+              treinamento_id: novoTreinamentoId,
+              formulario_id: formularioSelecionado,
+              token,
+              respondente_nome: null,
+              respondente_email: null,
+              respondente_tipo: 'colaborador',
+            })
+            if (tokenError) throw tokenError
+            setLinksGerados([{ token, respondente_nome: null }])
+          }
+          setLinksDialogOpen(true)
+          abriuDialog = true
+        } catch (tokenErr) {
+          console.error('Erro ao gerar links de pesquisa:', tokenErr)
+          toast.error('Treinamento salvo, mas não foi possível gerar os links de pesquisa.')
+        }
+      }
+
+      if (!abriuDialog) onSuccess()
     } catch (error) {
       const err = error as { message?: string; details?: string; hint?: string } | null
       const msg =
@@ -639,32 +962,87 @@ function ColaboradorForm({
     }
   }
 
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const copyLink = (token: string) => {
+    const url = `${origin}/pesquisa/${token}`
+    navigator.clipboard.writeText(url).then(() => toast.success('Link copiado.'))
+  }
+  const copyAllLinks = () => {
+    const urls = linksGerados.map((l) => `${origin}/pesquisa/${l.token}`).join('\n')
+    navigator.clipboard.writeText(urls).then(() => toast.success('Todos os links copiados.'))
+  }
+
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
       className="bg-card rounded-xl border border-border shadow-sm p-6 flex flex-col gap-5"
     >
       <FormField label="Nome do Treinamento" error={errors.nome?.message}>
-        <Input
-          placeholder="Ex.: Excel Avançado para Finanças"
-          {...register('nome')}
+        <Controller
+          control={control}
+          name="nome"
+          render={({ field }) => (
+            <Select
+              value={catalogoItemSelecionado ?? (catalogoItems.find((i) => i.titulo === field.value)?.id ?? '')}
+              onValueChange={(value) => {
+                const item = catalogoItems.find((i) => i.id === value)
+                if (item) {
+                  setCatalogoItemSelecionado(item.id)
+                  field.onChange(item.titulo)
+                  setValue('objetivo', item.objetivo ?? '')
+                  setValue('conteudo', item.conteudo_programatico ?? '')
+                  setValue('cargaHoraria', item.carga_horaria ?? 0)
+                } else {
+                  setCatalogoItemSelecionado(null)
+                }
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Selecione do catálogo" />
+              </SelectTrigger>
+              <SelectContent>
+                {catalogoItems.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>
+                    {i.titulo}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         />
+        {catalogoItems.length === 0 && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Nenhum item ativo no catálogo. <Link href="/dashboard/gestao/catalogo" className="text-primary underline">Catálogo</Link>
+          </p>
+        )}
       </FormField>
 
       <FormField label="Conteúdo Programático" error={errors.conteudo?.message}>
-        <Textarea
-          placeholder="Descreva os temas e módulos abordados..."
-          className="min-h-[80px] resize-y"
-          {...register('conteudo')}
-        />
+        <div className="relative">
+          <Textarea
+            placeholder="Descreva os temas e módulos abordados..."
+            className={cn('min-h-[80px] resize-y', catalogoItemSelecionado && 'pr-10')}
+            disabled={!!catalogoItemSelecionado}
+            {...register('conteudo')}
+          />
+          {catalogoItemSelecionado && (
+            <Lock className="absolute right-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
+          )}
+        </div>
       </FormField>
 
       <FormField label="Objetivo" error={errors.objetivo?.message}>
-        <Textarea
-          placeholder="Qual o objetivo deste treinamento?"
-          className="min-h-[80px] resize-y"
-          {...register('objetivo')}
-        />
+        <div className="relative">
+          <Textarea
+            placeholder="Qual o objetivo deste treinamento?"
+            className={cn('min-h-[80px] resize-y', catalogoItemSelecionado && 'pr-10')}
+            disabled={!!catalogoItemSelecionado}
+            {...register('objetivo')}
+          />
+          {catalogoItemSelecionado && (
+            <Lock className="absolute right-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
+          )}
+        </div>
       </FormField>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -675,9 +1053,13 @@ function ColaboradorForm({
               min={0}
               step={0.5}
               placeholder="0"
-              className="pr-14"
+              className={cn('pr-14', catalogoItemSelecionado && 'pr-10')}
+              disabled={!!catalogoItemSelecionado}
               {...register('cargaHoraria')}
             />
+            {catalogoItemSelecionado && (
+              <Lock className="absolute right-10 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            )}
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
               horas
             </span>
@@ -712,37 +1094,117 @@ function ColaboradorForm({
         <Input type="date" {...register('dataTreinamento')} />
       </FormField>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <FormField label="Índice de Satisfação (%)" error={errors.indiceSatisfacao?.message}>
-          <div className="relative">
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              placeholder="0"
-              className="pr-8"
-              {...register('indiceSatisfacao')}
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-              %
-            </span>
+      <div className="space-y-3">
+        <Label className="text-sm font-medium text-foreground">Índice de Satisfação</Label>
+        <div className="flex rounded-lg border border-border overflow-hidden">
+          <button
+            type="button"
+            onClick={() => { setModoSatisfacao('manual'); setFormularioSelecionado(null) }}
+            className={cn(
+              'flex-1 px-3 py-2 text-sm font-medium transition-colors',
+              modoSatisfacao === 'manual'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-background text-muted-foreground hover:bg-muted'
+            )}
+          >
+            Manual
+          </button>
+          <button
+            type="button"
+            onClick={() => { setModoSatisfacao('pesquisa'); setValue('indiceSatisfacao', 0) }}
+            className={cn(
+              'flex-1 px-3 py-2 text-sm font-medium transition-colors',
+              modoSatisfacao === 'pesquisa'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-background text-muted-foreground hover:bg-muted'
+            )}
+          >
+            Via Pesquisa
+          </button>
+        </div>
+        {modoSatisfacao === 'manual' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <FormField label="Índice de Satisfação (%)" error={errors.indiceSatisfacao?.message}>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  placeholder="0"
+                  className="pr-8"
+                  {...register('indiceSatisfacao')}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                  %
+                </span>
+              </div>
+            </FormField>
+            <FormField label="Índice de Aprovação (%)" error={errors.indiceAprovacao?.message}>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  placeholder="0"
+                  className="pr-8"
+                  {...register('indiceAprovacao')}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                  %
+                </span>
+              </div>
+            </FormField>
           </div>
-        </FormField>
-        <FormField label="Índice de Aprovação (%)" error={errors.indiceAprovacao?.message}>
-          <div className="relative">
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              placeholder="0"
-              className="pr-8"
-              {...register('indiceAprovacao')}
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-              %
-            </span>
+        )}
+        {modoSatisfacao === 'pesquisa' && (
+          <div className="space-y-2">
+            {formulariosPesquisa.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhum formulário de pesquisa ativo. Crie um em{' '}
+                <Link href="/dashboard/gestao/pesquisas" className="text-[#00C9A7] underline">
+                  Pesquisas
+                </Link>
+                .
+              </p>
+            ) : (
+              <FormField label="Formulário de pesquisa">
+                <Select
+                  value={formularioSelecionado ?? ''}
+                  onValueChange={(v) => setFormularioSelecionado(v || null)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecione o formulário" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {formulariosPesquisa.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>
+                        {f.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div />
+              <FormField label="Índice de Aprovação (%)" error={errors.indiceAprovacao?.message}>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    placeholder="0"
+                    className="pr-8"
+                    {...register('indiceAprovacao')}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                    %
+                  </span>
+                </div>
+              </FormField>
+            </div>
           </div>
-        </FormField>
+        )}
       </div>
 
       {/* Colaboradores Section */}
@@ -833,11 +1295,57 @@ function ColaboradorForm({
 
       <Button
         type="submit"
-        disabled={isSubmitting || (isColaboradorLimited && !colaboradorLogado)}
+        disabled={
+          isSubmitting ||
+          (isColaboradorLimited && !colaboradorLogado) ||
+          (modoSatisfacao === 'pesquisa' && !formularioSelecionado && formulariosPesquisa.length > 0)
+        }
         className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-base shadow-lg shadow-primary/20 transition-all"
       >
         {isSubmitting ? 'Salvando...' : 'Salvar Treinamento'}
       </Button>
+
+      <Dialog open={linksDialogOpen} onOpenChange={setLinksDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-serif">Links de pesquisa gerados</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {linksGerados.map((l) => (
+              <div
+                key={l.token}
+                className="flex items-center gap-2 p-2 rounded-lg border bg-muted/30"
+              >
+                <span className="flex-1 truncate text-sm">
+                  {l.respondente_nome ? `${l.respondente_nome}: ` : ''}
+                  {origin}/pesquisa/{l.token}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => copyLink(l.token)}
+                  aria-label="Copiar link"
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={copyAllLinks}>
+              Copiar todos os links
+            </Button>
+            <Button
+              type="button"
+              className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
+              onClick={() => { setLinksDialogOpen(false); onSuccess() }}
+            >
+              Fechar e continuar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </form>
   )
 }

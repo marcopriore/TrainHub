@@ -115,6 +115,12 @@ const PERMISSOES_AGRUPADAS = [
           { key: 'gerenciar_categorias' as const, label: 'Gerenciar Categorias' },
         ],
       },
+      {
+        categoria: 'Pesquisas',
+        permissoes: [
+          { key: 'gerenciar_pesquisas' as const, label: 'Gerenciar Pesquisas de Satisfação' },
+        ],
+      },
     ],
   },
   {
