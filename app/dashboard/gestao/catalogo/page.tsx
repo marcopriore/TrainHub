@@ -2,8 +2,6 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { Plus, Pencil, Trash2, Award, Upload } from 'lucide-react'
-import jsPDF from 'jspdf'
-import html2canvas from 'html2canvas'
 import { useForm, Controller } from 'react-hook-form'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
@@ -47,8 +45,26 @@ import {
 import { cn } from '@/lib/utils'
 
 type CamposPosicoes = {
-  corpo: { x: number; y: number; texto: string }
-  data: { x: number; y: number; texto: string }
+  corpo: { x: number; y: number; texto: string; fontSize: number; maxWidth: number }
+  data: { x: number; y: number; texto: string; fontSize: number; maxWidth: number }
+}
+
+const defaultCamposPosicoes: CamposPosicoes = {
+  corpo: {
+    x: 50,
+    y: 55,
+    texto:
+      'Certificamos que {{nome}} participou do treinamento "{{treinamento}}" com carga horária de {{carga_horaria}} horas.',
+    fontSize: 16,
+    maxWidth: 80,
+  },
+  data: {
+    x: 50,
+    y: 80,
+    texto: '{{data}}',
+    fontSize: 13,
+    maxWidth: 40,
+  },
 }
 
 export async function gerarCertificadoPDF(params: {
@@ -59,70 +75,138 @@ export async function gerarCertificadoPDF(params: {
   cargaHoraria: string
   dataConclusao: string
 }) {
-  const { templateImageUrl, camposPosicoes, nomeColaborador, nomeTreinamento, cargaHoraria, dataConclusao } = params
+  const {
+    templateImageUrl,
+    camposPosicoes,
+    nomeColaborador,
+    nomeTreinamento,
+    cargaHoraria,
+    dataConclusao,
+  } = params
 
   if (typeof document === 'undefined') return
 
-  const container = document.createElement('div')
-  container.style.position = 'fixed'
-  container.style.left = '-9999px'
-  container.style.top = '0'
-  container.style.width = '1122px'
-  container.style.height = '794px'
-  container.style.backgroundImage = `url(${templateImageUrl})`
-  container.style.backgroundSize = 'cover'
-  container.style.backgroundPosition = 'center'
-  container.style.display = 'block'
+  const { jsPDF } = await import('jspdf')
+  const html2canvas = (await import('html2canvas')).default
 
-  const applyVariables = (texto: string) =>
-    texto
-      .replace(/{{\s*nome\s*}}/g, nomeColaborador)
-      .replace(/{{\s*treinamento\s*}}/g, nomeTreinamento)
-      .replace(/{{\s*carga_horaria\s*}}/g, cargaHoraria)
-      .replace(/{{\s*data\s*}}/g, dataConclusao)
+  const PDF_WIDTH = 1122
+  const previewWidthMeta = (camposPosicoes as any)._previewWidth ?? 800
+  const scaleFactor = PDF_WIDTH / previewWidthMeta
 
-  const corpoDiv = document.createElement('div')
-  corpoDiv.textContent = applyVariables(camposPosicoes.corpo.texto)
-  corpoDiv.style.position = 'absolute'
-  corpoDiv.style.left = `${camposPosicoes.corpo.x}%`
-  corpoDiv.style.top = `${camposPosicoes.corpo.y}%`
-  corpoDiv.style.transform = 'translate(-50%, -50%)'
-  corpoDiv.style.color = '#ffffff'
-  corpoDiv.style.textAlign = 'center'
-  corpoDiv.style.fontSize = '14px'
-  corpoDiv.style.textShadow = '0 1px 3px rgba(0,0,0,0.7)'
-  corpoDiv.style.maxWidth = '80%'
-  corpoDiv.style.margin = '0 auto'
+  const corpoFontSize = Math.round((camposPosicoes.corpo.fontSize ?? 16) * scaleFactor)
+  const dataFontSize = Math.round((camposPosicoes.data.fontSize ?? 13) * scaleFactor)
 
-  const dataDiv = document.createElement('div')
-  dataDiv.textContent = applyVariables(camposPosicoes.data.texto)
-  dataDiv.style.position = 'absolute'
-  dataDiv.style.left = `${camposPosicoes.data.x}%`
-  dataDiv.style.top = `${camposPosicoes.data.y}%`
-  dataDiv.style.transform = 'translate(-50%, -50%)'
-  dataDiv.style.color = '#ffffff'
-  dataDiv.style.textAlign = 'center'
-  dataDiv.style.fontSize = '12px'
-  dataDiv.style.textShadow = '0 1px 3px rgba(0,0,0,0.7)'
+  let dataExtenso = dataConclusao
+  try {
+    const dateObj = dataConclusao ? new Date(dataConclusao) : new Date()
+    if (!isNaN(dateObj.getTime())) {
+      dataExtenso = dateObj.toLocaleDateString('pt-BR', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    }
+  } catch {
+    dataExtenso = new Date().toLocaleDateString('pt-BR', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })
+  }
 
-  container.appendChild(corpoDiv)
-  container.appendChild(dataDiv)
-  document.body.appendChild(container)
+  const substituir = (texto: string) =>
+    (texto ?? '')
+      .replace(/\{\{\s*nome\s*\}\}/g, nomeColaborador)
+      .replace(/\{\{\s*treinamento\s*\}\}/g, nomeTreinamento)
+      .replace(/\{\{\s*carga_horaria\s*\}\}/g, cargaHoraria)
+      .replace(/\{\{\s*data\s*\}\}/g, dataExtenso)
+
+  const iframe = document.createElement('iframe')
+  iframe.style.cssText =
+    'position:fixed;left:-9999px;top:-9999px;width:1122px;height:794px;border:none;'
+  document.body.appendChild(iframe)
 
   try {
-    const canvas = await html2canvas(container, { scale: 2 })
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
+    if (!iframeDoc) throw new Error('Não foi possível acessar o iframe')
+
+    iframeDoc.open()
+    iframeDoc.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1122px;
+    height: 794px;
+    background-image: url('${templateImageUrl}');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: #ffffff;
+    font-family: Arial, Helvetica, sans-serif;
+    position: relative;
+    overflow: hidden;
+  }
+  .campo {
+    word-wrap: break-word;
+  }
+</style>
+</head>
+<body>
+  <div class="campo" style="
+    left: ${camposPosicoes.corpo.x}%;
+    top: ${camposPosicoes.corpo.y}%;
+    width: ${camposPosicoes.corpo.maxWidth ?? 80}%;
+    font-size: ${corpoFontSize}px;
+    color: #1a1a1a;
+    text-align: center;
+    font-family: Arial, Helvetica, sans-serif;
+    line-height: 1.4;
+    position: absolute;
+    transform: translate(-50%, -50%);
+  ">${substituir(camposPosicoes.corpo.texto ?? '')}</div>
+  <div class="campo" style="
+    left: ${camposPosicoes.data.x}%;
+    top: ${camposPosicoes.data.y}%;
+    width: ${camposPosicoes.data.maxWidth ?? 40}%;
+    font-size: ${dataFontSize}px;
+    color: #1a1a1a;
+    text-align: center;
+    font-family: Arial, Helvetica, sans-serif;
+    line-height: 1.4;
+    position: absolute;
+    transform: translate(-50%, -50%);
+  ">${substituir(camposPosicoes.data.texto ?? '')}</div>
+</body>
+</html>`)
+    iframeDoc.close()
+
+    await new Promise((resolve) => setTimeout(resolve, 800))
+
+    const canvas = await html2canvas(iframeDoc.body, {
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      scale: 2,
+      logging: false,
+      width: 1122,
+      height: 794,
+    })
+
     const imgData = canvas.toDataURL('image/png')
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+    const pdfWidth = pdf.internal.pageSize.getWidth()
+    const pdfHeight = pdf.internal.pageSize.getHeight()
 
-    const pdf = new jsPDF('landscape', 'pt', 'a4')
-    const pageWidth = pdf.internal.pageSize.getWidth()
-    const pageHeight = pdf.internal.pageSize.getHeight()
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
 
-    pdf.addImage(imgData, 'PNG', 0, 0, pageWidth, pageHeight)
     const safeNome = nomeColaborador.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')
     const safeTreinamento = nomeTreinamento.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')
     pdf.save(`certificado-${safeNome}-${safeTreinamento}.pdf`)
   } finally {
-    document.body.removeChild(container)
+    document.body.removeChild(iframe)
   }
 }
 
@@ -204,22 +288,9 @@ export default function CatalogoPage() {
   const [templateLoading, setTemplateLoading] = useState(false)
   const [templateUploading, setTemplateUploading] = useState(false)
   const [templateImageUrl, setTemplateImageUrl] = useState<string | null>(null)
-  const [camposPosicoes, setCamposPosicoes] = useState<CamposPosicoes>({
-    corpo: {
-      x: 50,
-      y: 55,
-      texto:
-        'Certificamos que {{nome}} participou do treinamento "{{treinamento}}" com carga horária de {{carga_horaria}} horas.',
-    },
-    data: {
-      x: 50,
-      y: 80,
-      texto: '{{data}}',
-    },
-  })
+  const [camposPosicoes, setCamposPosicoes] = useState<CamposPosicoes>(defaultCamposPosicoes)
   const previewRef = useRef<HTMLDivElement | null>(null)
   const draggingFieldRef = useRef<keyof CamposPosicoes | null>(null)
-  const dragOffsetRef = useRef<{ x: number; y: number } | null>(null)
   const [templateTestingPdf, setTemplateTestingPdf] = useState(false)
 
   const supabase = createClient()
@@ -355,36 +426,36 @@ export default function CatalogoPage() {
         return
       }
 
-      const typed = data as { imagem_url: string | null; campos_posicoes?: Partial<CamposPosicoes> } | null
-      setTemplateImageUrl(typed?.imagem_url ?? null)
+      const typed = data as {
+        imagem_url: string | null
+        campos_posicoes?: Partial<CamposPosicoes>
+      } | null
+
+      if (typed?.imagem_url) {
+        setTemplateImageUrl(`${typed.imagem_url}?t=${Date.now()}`)
+      } else {
+        setTemplateImageUrl(null)
+      }
 
       if (typed?.campos_posicoes) {
         setCamposPosicoes((prev) => ({
-          data: {
-            x: typed.campos_posicoes.data?.x ?? prev.data.x,
-            y: typed.campos_posicoes.data?.y ?? prev.data.y,
-            texto: typed.campos_posicoes.data?.texto ?? prev.data.texto,
-          },
           corpo: {
             x: typed.campos_posicoes.corpo?.x ?? prev.corpo.x,
             y: typed.campos_posicoes.corpo?.y ?? prev.corpo.y,
             texto: typed.campos_posicoes.corpo?.texto ?? prev.corpo.texto,
+            fontSize: typed.campos_posicoes.corpo?.fontSize ?? prev.corpo.fontSize ?? 16,
+            maxWidth: typed.campos_posicoes.corpo?.maxWidth ?? prev.corpo.maxWidth ?? 80,
+          },
+          data: {
+            x: typed.campos_posicoes.data?.x ?? prev.data.x,
+            y: typed.campos_posicoes.data?.y ?? prev.data.y,
+            texto: typed.campos_posicoes.data?.texto ?? prev.data.texto,
+            fontSize: typed.campos_posicoes.data?.fontSize ?? prev.data.fontSize ?? 13,
+            maxWidth: typed.campos_posicoes.data?.maxWidth ?? prev.data.maxWidth ?? 40,
           },
         }))
       } else {
-        setCamposPosicoes({
-          corpo: {
-            x: 50,
-            y: 55,
-            texto:
-              'Certificamos que {{nome}} participou do treinamento "{{treinamento}}" com carga horária de {{carga_horaria}} horas.',
-          },
-          data: {
-            x: 50,
-            y: 80,
-            texto: '{{data}}',
-          },
-        })
+        setCamposPosicoes(defaultCamposPosicoes)
       }
     } catch (error) {
       console.error('Erro ao buscar template de certificado:', error)
@@ -451,7 +522,8 @@ export default function CatalogoPage() {
         return
       }
 
-      setTemplateImageUrl(publicUrl)
+      const urlComCache = `${publicUrl}?t=${Date.now()}`
+      setTemplateImageUrl(urlComCache)
       toast.success('Template de certificado atualizado com sucesso.')
     } catch (error) {
       console.error('Erro ao processar template de certificado:', error)
@@ -503,11 +575,15 @@ export default function CatalogoPage() {
     if (!activeTenantId) return
     try {
       const supabase = createClient()
+      const previewWidth = previewRef.current?.getBoundingClientRect().width ?? 800
       const { error } = await supabase.from('certificado_templates').upsert(
         {
           tenant_id: activeTenantId,
           imagem_url: templateImageUrl,
-          campos_posicoes: positions,
+          campos_posicoes: {
+            ...positions,
+            _previewWidth: previewWidth,
+          } as any,
           ativo: true,
           atualizado_em: new Date().toISOString(),
         },
@@ -526,26 +602,22 @@ export default function CatalogoPage() {
   }
 
   const handlePreviewMouseMove = (event: any) => {
-    if (!draggingFieldRef.current || !previewRef.current) return
+    if (!previewRef.current || !draggingFieldRef.current) return
 
     const rect = previewRef.current.getBoundingClientRect()
-    const offset = dragOffsetRef.current ?? { x: 0, y: 0 }
-
-    const centerX = event.clientX - rect.left - offset.x
-    const centerY = event.clientY - rect.top - offset.y
-
     if (rect.width <= 0 || rect.height <= 0) return
 
-    let xPercent = (centerX / rect.width) * 100
-    let yPercent = (centerY / rect.height) * 100
+    const relativeX = ((event.clientX - rect.left) / rect.width) * 100
+    const relativeY = ((event.clientY - rect.top) / rect.height) * 100
 
-    xPercent = Math.min(95, Math.max(5, xPercent))
-    yPercent = Math.min(95, Math.max(5, yPercent))
+    const xPercent = Math.min(95, Math.max(5, relativeX))
+    const yPercent = Math.min(95, Math.max(5, relativeY))
 
     const fieldKey = draggingFieldRef.current
     setCamposPosicoes((prev) => ({
       ...prev,
       [fieldKey]: {
+        ...prev[fieldKey],
         x: xPercent,
         y: yPercent,
       },
@@ -556,24 +628,12 @@ export default function CatalogoPage() {
     if (!draggingFieldRef.current) return
     const positions = { ...camposPosicoes }
     draggingFieldRef.current = null
-    dragOffsetRef.current = null
     await saveTemplatePositions(positions)
   }
 
   const handleFieldMouseDown = (event: any, field: keyof CamposPosicoes) => {
-    if (!previewRef.current) return
     event.preventDefault()
-    const rect = previewRef.current.getBoundingClientRect()
-    const elementRect = (event.currentTarget as HTMLDivElement).getBoundingClientRect()
-
-    const elementCenterX = elementRect.left - rect.left + elementRect.width / 2
-    const elementCenterY = elementRect.top - rect.top + elementRect.height / 2
-
-    const offsetX = event.clientX - (rect.left + elementCenterX)
-    const offsetY = event.clientY - (rect.top + elementCenterY)
-
     draggingFieldRef.current = field
-    dragOffsetRef.current = { x: offsetX, y: offsetY }
   }
 
   const openNewSheet = () => {
@@ -802,28 +862,130 @@ export default function CatalogoPage() {
                         <Label className="text-xs text-muted-foreground">Texto principal</Label>
                         <Textarea
                           rows={3}
-                          value={camposPosicoes.corpo.texto}
+                          value={camposPosicoes.corpo.texto ?? ''}
                           onChange={(e) =>
                             setCamposPosicoes((prev) => ({
                               ...prev,
-                              corpo: { ...prev.corpo, texto: e.target.value },
+                              corpo: { ...prev.corpo, texto: e.target.value ?? '' },
                             }))
                           }
                           className="text-sm"
                         />
                       </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Tamanho da fonte</Label>
+                          <Input
+                            type="number"
+                            min={8}
+                            max={48}
+                            step={1}
+                            value={camposPosicoes.corpo.fontSize}
+                            onChange={(e) =>
+                              setCamposPosicoes((prev) => ({
+                                ...prev,
+                                corpo: {
+                                  ...prev.corpo,
+                                  fontSize: Math.min(
+                                    48,
+                                    Math.max(8, Number(e.target.value) || prev.corpo.fontSize)
+                                  ),
+                                },
+                              }))
+                            }
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">
+                            Largura da caixa (%)
+                          </Label>
+                          <Input
+                            type="number"
+                            min={10}
+                            max={100}
+                            step={5}
+                            value={camposPosicoes.corpo.maxWidth}
+                            onChange={(e) =>
+                              setCamposPosicoes((prev) => {
+                                const val = Number(e.target.value)
+                                const clamped = Math.min(100, Math.max(10, val || prev.corpo.maxWidth))
+                                return {
+                                  ...prev,
+                                  corpo: {
+                                    ...prev.corpo,
+                                    maxWidth: clamped,
+                                  },
+                                }
+                              })
+                            }
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                      </div>
                       <div className="space-y-2">
                         <Label className="text-xs text-muted-foreground">Formato da data</Label>
                         <Input
-                          value={camposPosicoes.data.texto}
+                          value={camposPosicoes.data.texto ?? ''}
                           onChange={(e) =>
                             setCamposPosicoes((prev) => ({
                               ...prev,
-                              data: { ...prev.data, texto: e.target.value },
+                              data: { ...prev.data, texto: e.target.value ?? '' },
                             }))
                           }
                           className="text-sm"
                         />
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Tamanho da fonte</Label>
+                          <Input
+                            type="number"
+                            min={8}
+                            max={48}
+                            step={1}
+                            value={camposPosicoes.data.fontSize}
+                            onChange={(e) =>
+                              setCamposPosicoes((prev) => ({
+                                ...prev,
+                                data: {
+                                  ...prev.data,
+                                  fontSize: Math.min(
+                                    48,
+                                    Math.max(8, Number(e.target.value) || prev.data.fontSize)
+                                  ),
+                                },
+                              }))
+                            }
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">
+                            Largura da caixa (%)
+                          </Label>
+                          <Input
+                            type="number"
+                            min={10}
+                            max={100}
+                            step={5}
+                            value={camposPosicoes.data.maxWidth}
+                            onChange={(e) =>
+                              setCamposPosicoes((prev) => {
+                                const val = Number(e.target.value)
+                                const clamped = Math.min(100, Math.max(10, val || prev.data.maxWidth))
+                                return {
+                                  ...prev,
+                                  data: {
+                                    ...prev.data,
+                                    maxWidth: clamped,
+                                  },
+                                }
+                              })
+                            }
+                            className="h-8 text-xs"
+                          />
+                        </div>
                       </div>
                       <div className="space-y-1">
                         <div className="flex flex-wrap gap-2 text-xs">
@@ -854,39 +1016,50 @@ export default function CatalogoPage() {
                     </div>
 
                     <div className="space-y-3">
-                    <h3 className="text-sm font-medium text-foreground">Preview</h3>
-                    {templateLoading ? (
-                      <Skeleton className="w-full aspect-[16/9] rounded-lg" />
-                    ) : templateImageUrl ? (
-                      <div
-                        ref={previewRef}
-                        className="relative w-full aspect-[16/9] rounded-lg overflow-hidden border border-border bg-muted"
-                        onMouseMove={handlePreviewMouseMove}
-                        onMouseUp={handlePreviewMouseUp}
-                        onMouseLeave={handlePreviewMouseUp}
-                      >
+                      <h3 className="text-sm font-medium text-foreground">Preview</h3>
+                      {templateLoading ? (
+                        <Skeleton className="w-full rounded-lg" style={{ aspectRatio: '1122/794' }} />
+                      ) : templateImageUrl ? (
                         <div
-                          className="absolute inset-0 bg-center bg-cover"
-                          style={{ backgroundImage: `url(${templateImageUrl})` }}
-                        />
+                          ref={previewRef}
+                          className="relative w-full rounded-lg overflow-hidden border border-border bg-muted"
+                          style={{ aspectRatio: '1122/794' }}
+                          onMouseMove={handlePreviewMouseMove}
+                          onMouseUp={handlePreviewMouseUp}
+                          onMouseLeave={handlePreviewMouseUp}
+                        >
+                          <div
+                            className="absolute inset-0"
+                            style={{
+                              backgroundImage: `url(${templateImageUrl})`,
+                              backgroundSize: 'contain',
+                              backgroundRepeat: 'no-repeat',
+                              backgroundPosition: 'center',
+                            }}
+                          />
                         <div className="absolute inset-0 bg-black/10" />
 
                         {/* Corpo */}
                         <div
                           className={cn(
-                            'absolute text-center text-white text-xs sm:text-sm drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]',
-                            'cursor-grab hover:outline hover:outline-1 hover:outline-dashed hover:outline-white/70'
+                            'absolute text-center text-xs sm:text-sm',
+                            'cursor-grab',
+                            draggingFieldRef.current === 'corpo' &&
+                              'outline outline-2 outline-dashed outline-[#00C9A7] outline-offset-4'
                           )}
                           style={{
                             left: `${camposPosicoes.corpo.x}%`,
                             top: `${camposPosicoes.corpo.y}%`,
                             transform: 'translate(-50%, -50%)',
-                            maxWidth: '80%',
+                            width: `${camposPosicoes.corpo.maxWidth}%`,
+                            color: '#1a1a1a',
+                            textShadow: '0 1px 2px rgba(255,255,255,0.8)',
+                            fontSize: `${camposPosicoes.corpo.fontSize}px`,
                           }}
                           onMouseDown={(event) => handleFieldMouseDown(event, 'corpo')}
                         >
-                          <span className="text-[14px] leading-snug">
-                            {camposPosicoes.corpo.texto
+                          <span className="leading-snug block text-center">
+                            {(camposPosicoes.corpo?.texto ?? '')
                               .replace(/{{\s*nome\s*}}/g, 'João da Silva')
                               .replace(/{{\s*treinamento\s*}}/g, 'Nome do Treinamento')
                               .replace(/{{\s*carga_horaria\s*}}/g, '40')
@@ -904,36 +1077,45 @@ export default function CatalogoPage() {
                         {/* Data */}
                         <div
                           className={cn(
-                            'absolute text-center text-white text-xs sm:text-sm drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]',
-                            'cursor-grab hover:outline hover:outline-1 hover:outline-dashed hover:outline-white/70'
+                            'absolute text-center text-xs sm:text-sm',
+                            'cursor-grab',
+                            draggingFieldRef.current === 'data' &&
+                              'outline outline-2 outline-dashed outline-[#00C9A7] outline-offset-4'
                           )}
                           style={{
                             left: `${camposPosicoes.data.x}%`,
                             top: `${camposPosicoes.data.y}%`,
                             transform: 'translate(-50%, -50%)',
+                            width: `${camposPosicoes.data.maxWidth}%`,
+                            color: '#1a1a1a',
+                            textShadow: '0 1px 2px rgba(255,255,255,0.8)',
+                            fontSize: `${camposPosicoes.data.fontSize}px`,
                           }}
                           onMouseDown={(event) => handleFieldMouseDown(event, 'data')}
                         >
-                          <span>
-                            {camposPosicoes.data.texto.replace(
+                          <span className="block text-center">
+                            {(camposPosicoes.data?.texto ?? '').replace(
                               /{{\s*data\s*}}/g,
                               new Date().toLocaleDateString('pt-BR', {
-                                day: '2-digit',
-                                month: '2-digit',
+                                day: 'numeric',
+                                month: 'long',
                                 year: 'numeric',
                               })
                             )}
                           </span>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="w-full aspect-[16/9] rounded-lg border border-dashed border-muted-foreground/40 bg-muted flex items-center justify-center text-center px-6">
-                        <p className="text-sm text-muted-foreground">
-                          Faça upload da arte do certificado para visualizar o preview aqui.
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                        </div>
+                      ) : (
+                        <div
+                          className="w-full rounded-lg border border-dashed border-muted-foreground/40 bg-muted flex items-center justify-center text-center px-6"
+                          style={{ aspectRatio: '1122/794' }}
+                        >
+                          <p className="text-sm text-muted-foreground">
+                            Faça upload da arte do certificado para visualizar o preview aqui.
+                          </p>
+                        </div>
+                      )}
+                    </div>
 
                     <div className="space-y-2">
                       <div className="flex flex-wrap gap-2 text-xs">
@@ -964,18 +1146,18 @@ export default function CatalogoPage() {
                       if (!templateImageUrl) return
                       setTemplateTestingPdf(true)
                       try {
-                        const hoje = new Date().toLocaleDateString('pt-BR', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                        })
+                        const hojeISO = new Date().toISOString().split('T')[0]
                         await gerarCertificadoPDF({
                           templateImageUrl,
-                          camposPosicoes,
+                          camposPosicoes: {
+                            ...(camposPosicoes as CamposPosicoes),
+                            _previewWidth:
+                              previewRef.current?.getBoundingClientRect().width ?? 800,
+                          } as any,
                           nomeColaborador: 'João da Silva',
                           nomeTreinamento: 'Nome do Treinamento',
                           cargaHoraria: '40',
-                          dataConclusao: hoje,
+                          dataConclusao: hojeISO,
                         })
                       } catch (error) {
                         console.error('Erro ao gerar PDF de teste do certificado:', error)
