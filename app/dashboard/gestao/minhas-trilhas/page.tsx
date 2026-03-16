@@ -236,13 +236,18 @@ export default function MinhasTrilhasPage() {
     : '—'
 
   const getPesquisaStatus = (t: TreinamentoRow): PesquisaStatus => {
+    const tokenData = tokensByTreinamento.get(t.id)
+
+    if (tokenData) {
+      if (tokenData.usado) return { status: 'respondida', token: tokenData.token }
+      return { status: 'pendente', token: tokenData.token }
+    }
+
     if (t.indice_satisfacao !== null && t.indice_satisfacao !== 0) {
       return { status: 'dispensado' }
     }
-    const tokenData = tokensByTreinamento.get(t.id)
-    if (!tokenData) return { status: 'na' }
-    if (tokenData.usado) return { status: 'respondida', token: tokenData.token }
-    return { status: 'pendente', token: tokenData.token }
+
+    return { status: 'na' }
   }
 
   const certificadoLiberado = (t: TreinamentoRow): boolean => {

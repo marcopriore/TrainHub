@@ -11,7 +11,7 @@
 - **Branch principal:** `main` (produção) | `master` (desenvolvimento)
 - **Deploy produção:** https://trainhub-app.vercel.app
 - **Vercel project:** trainhub-app
-- **Versão atual:** v2.16.4
+- **Versão atual:** v2.17.4
 
 ---
 
@@ -480,6 +480,11 @@ Módulo: Trilhas de Conhecimento (BookOpen, azul)
 | v2.16.2 | Certificado: caixas editáveis com variáveis e geração PDF |
 | v2.16.3 | Certificado: PDF via iframe, escala proporcional, data extenso |
 | v2.16.4 | Minhas Trilhas: download de certificado integrado ao template |
+| v2.17.0 | Minhas Trilhas: coluna Pesquisa com status e bloqueio de certificado |
+| v2.17.1 | Fix: header coluna Pesquisa e URL do token pendente |
+| v2.17.2 | Fix: data com timezone e modal pesquisa sem duplicar registro |
+| v2.17.3 | Fix: datas sem offset timezone em todas as telas |
+| v2.17.4 | Fix: race condition no carregamento de módulos ao dar F5 |
 
 ---
 
