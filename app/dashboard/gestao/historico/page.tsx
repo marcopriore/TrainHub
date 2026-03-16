@@ -61,6 +61,7 @@ import { cn } from '@/lib/utils'
 
 interface Treinamento {
   id: string
+  codigo: string
   tipo: string
   nome: string
   conteudo: string | null
@@ -606,7 +607,7 @@ export default function HistoricoPage() {
 
       const { data, error } = await supabase
         .from('treinamentos')
-        .select('*, empresas_parceiras(nome)')
+          .select('*, empresas_parceiras(nome)')
         .in('id', ids)
         .order('data_treinamento', { ascending: false })
       if (error) throw error
@@ -895,6 +896,7 @@ export default function HistoricoPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30">
+                <TableHead className="font-medium">Código</TableHead>
                 <TableHead className="font-medium">Tipo</TableHead>
                 <TableHead className="font-medium">Nome do Treinamento</TableHead>
                 <TableHead className="font-medium">Empresa Parceira</TableHead>
@@ -908,6 +910,11 @@ export default function HistoricoPage() {
             <TableBody>
               {filtered.map((t) => (
                 <TableRow key={t.id}>
+                  <TableCell>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {t.codigo}
+                    </span>
+                  </TableCell>
                   <TableCell>
                     <span
                       className={cn(

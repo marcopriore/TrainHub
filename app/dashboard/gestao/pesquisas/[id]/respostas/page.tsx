@@ -27,6 +27,7 @@ interface Formulario {
 
 interface Treinamento {
   id: string
+  codigo: string
   nome: string
   data_treinamento: string | null
 }
@@ -173,6 +174,7 @@ export default function PesquisaRespostasPage() {
               tenant_id,
               treinamento:treinamentos (
                 id,
+                codigo,
                 nome,
                 data_treinamento
               )
@@ -304,6 +306,7 @@ export default function PesquisaRespostasPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30">
+                <TableHead className="font-medium">Código</TableHead>
                 <TableHead className="font-medium">Nome</TableHead>
                 <TableHead className="font-medium hidden md:table-cell">E-mail</TableHead>
                 <TableHead className="font-medium">Tipo</TableHead>
@@ -337,6 +340,11 @@ export default function PesquisaRespostasPage() {
                         isExpanded ? 'bg-muted/40' : ''
                       }`}
                     >
+                      <TableCell>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {token.treinamento?.codigo ?? '—'}
+                        </span>
+                      </TableCell>
                       <TableCell className="font-medium text-foreground">
                         {respondenteNome}
                       </TableCell>

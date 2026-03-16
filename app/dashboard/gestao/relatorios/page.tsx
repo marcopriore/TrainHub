@@ -51,6 +51,7 @@ const COR_APROVACAO = '#22c55e'
 
 interface Treinamento {
   id: string
+  codigo: string
   tipo: string
   carga_horaria: number
   data_treinamento: string
@@ -120,7 +121,7 @@ export default function RelatoriosPage() {
       if (user?.isMaster() || user?.isAdmin?.()) {
         let query = supabase
           .from('treinamentos')
-          .select('id, tipo, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, empresa_parceira_id, empresas_parceiras(nome)')
+          .select('id, codigo, tipo, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, empresa_parceira_id, empresas_parceiras(nome)')
           .eq('tenant_id', activeTenantId)
           .gte('data_treinamento', appliedFilters.dataInicio)
           .lte('data_treinamento', appliedFilters.dataFim)
@@ -192,7 +193,7 @@ export default function RelatoriosPage() {
 
       let query = supabase
         .from('treinamentos')
-        .select('id, tipo, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, empresa_parceira_id, empresas_parceiras(nome)')
+        .select('id, codigo, tipo, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, empresa_parceira_id, empresas_parceiras(nome)')
         .in('id', ids)
         .gte('data_treinamento', appliedFilters.dataInicio)
         .lte('data_treinamento', appliedFilters.dataFim)
@@ -436,7 +437,30 @@ export default function RelatoriosPage() {
         mediaSatisfacao: r.mediaSatisfacao ?? '',
         mediaAprovacao: r.mediaAprovacao ?? '',
       }))
+
+      const treinamentosDetalhados = treinamentos.map((t) => ({
+        codigo: t.codigo,
+        tipo: t.tipo,
+        empresaParceira: t.empresas_parceiras?.nome ?? '',
+        dataTreinamento: t.data_treinamento,
+        cargaHoraria: t.carga_horaria,
+        indiceSatisfacao: t.indice_satisfacao ?? '',
+        indiceAprovacao: t.indice_aprovacao ?? '',
+      }))
       exportReportToExcel([
+        {
+          name: 'Treinamentos',
+          data: treinamentosDetalhados,
+          headerLabels: {
+            codigo: 'Código',
+            tipo: 'Tipo',
+            empresaParceira: 'Empresa Parceira',
+            dataTreinamento: 'Data do Treinamento',
+            cargaHoraria: 'Carga Horária',
+            indiceSatisfacao: 'Índice de Satisfação (%)',
+            indiceAprovacao: 'Índice de Aprovação (%)',
+          },
+        },
         {
           name: 'Horas por Período',
           data: horasPeriodoData,
