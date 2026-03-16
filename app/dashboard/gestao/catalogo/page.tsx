@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { useEffect, useState, useMemo, useRef } from 'react'
+import { Plus, Pencil, Trash2, Award, Upload } from 'lucide-react'
 import { useForm, Controller } from 'react-hook-form'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
@@ -118,6 +118,19 @@ export default function CatalogoPage() {
   const [itemToDelete, setItemToDelete] = useState<CatalogoItem | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [categorias, setCategorias] = useState<{ id: string; nome: string }[]>([])
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
+  const [templateLoading, setTemplateLoading] = useState(false)
+  const [templateUploading, setTemplateUploading] = useState(false)
+  const [templateImageUrl, setTemplateImageUrl] = useState<string | null>(null)
+  const [camposPosicoes, setCamposPosicoes] = useState({
+    nome: { x: 50, y: 62 },
+    treinamento: { x: 50, y: 72 },
+    carga_horaria: { x: 50, y: 80 },
+    data: { x: 50, y: 87 },
+  })
+  const previewRef = useRef<HTMLDivElement | null>(null)
+  const draggingFieldRef = useRef<keyof typeof camposPosicoes | null>(null)
+  const dragOffsetRef = useRef<{ x: number; y: number } | null>(null)
 
   const supabase = createClient()
 
@@ -234,6 +247,246 @@ export default function CatalogoPage() {
       return matchTitulo && matchStatus && matchCategoria && matchNivel && matchModalidade
     })
   }, [items, filtroTitulo, filtroStatus, filtroCategoria, filtroNivel, filtroModalidade])
+
+  const loadTemplate = async () => {
+    if (!activeTenantId) return
+    setTemplateLoading(true)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('certificado_templates')
+        .select('imagem_url, campos_posicoes')
+        .eq('tenant_id', activeTenantId)
+        .maybeSingle()
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erro ao buscar template de certificado:', error)
+        toast.error('Não foi possível carregar o template de certificado.')
+        return
+      }
+
+      const typed = data as { imagem_url: string | null; campos_posicoes?: any } | null
+      setTemplateImageUrl(typed?.imagem_url ?? null)
+
+      if (typed?.campos_posicoes) {
+        setCamposPosicoes((prev) => ({
+          nome: {
+            x: typed.campos_posicoes.nome?.x ?? prev.nome.x,
+            y: typed.campos_posicoes.nome?.y ?? prev.nome.y,
+          },
+          treinamento: {
+            x: typed.campos_posicoes.treinamento?.x ?? prev.treinamento.x,
+            y: typed.campos_posicoes.treinamento?.y ?? prev.treinamento.y,
+          },
+          carga_horaria: {
+            x: typed.campos_posicoes.carga_horaria?.x ?? prev.carga_horaria.x,
+            y: typed.campos_posicoes.carga_horaria?.y ?? prev.carga_horaria.y,
+          },
+          data: {
+            x: typed.campos_posicoes.data?.x ?? prev.data.x,
+            y: typed.campos_posicoes.data?.y ?? prev.data.y,
+          },
+        }))
+      } else {
+        setCamposPosicoes({
+          nome: { x: 50, y: 62 },
+          treinamento: { x: 50, y: 72 },
+          carga_horaria: { x: 50, y: 80 },
+          data: { x: 50, y: 87 },
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao buscar template de certificado:', error)
+      toast.error('Não foi possível carregar o template de certificado.')
+    } finally {
+      setTemplateLoading(false)
+    }
+  }
+
+  const handleTemplateFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !activeTenantId) return
+
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      toast.error('Apenas arquivos PNG ou JPG são permitidos.')
+      event.target.value = ''
+      return
+    }
+
+    const maxSize = 5 * 1024 * 1024
+    if (file.size > maxSize) {
+      toast.error('Tamanho máximo do arquivo é 5MB.')
+      event.target.value = ''
+      return
+    }
+
+    setTemplateUploading(true)
+    try {
+      const supabase = createClient()
+      const path = `${activeTenantId}/template.png`
+
+      const { error: uploadError } = await supabase.storage
+        .from('certificados')
+        .upload(path, file, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: file.type,
+        })
+
+      if (uploadError) {
+        console.error('Erro ao fazer upload do template de certificado:', uploadError)
+        toast.error('Erro ao enviar o arquivo. Tente novamente.')
+        return
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('certificados').getPublicUrl(path)
+
+      const { error: upsertError } = await supabase.from('certificado_templates').upsert(
+        {
+          tenant_id: activeTenantId,
+          imagem_url: publicUrl,
+          campos_posicoes: camposPosicoes,
+          ativo: true,
+          atualizado_em: new Date().toISOString(),
+        },
+        { onConflict: 'tenant_id' }
+      )
+
+      if (upsertError) {
+        console.error('Erro ao salvar template de certificado:', upsertError)
+        toast.error('Erro ao salvar o template de certificado.')
+        return
+      }
+
+      setTemplateImageUrl(publicUrl)
+      toast.success('Template de certificado atualizado com sucesso.')
+    } catch (error) {
+      console.error('Erro ao processar template de certificado:', error)
+      toast.error('Erro ao processar o template de certificado.')
+    } finally {
+      setTemplateUploading(false)
+      event.target.value = ''
+    }
+  }
+
+  const handleRemoveTemplate = async () => {
+    if (!activeTenantId) return
+
+    setTemplateUploading(true)
+    try {
+      const supabase = createClient()
+      const path = `${activeTenantId}/template.png`
+
+      const { error: storageError } = await supabase.storage
+        .from('certificados')
+        .remove([path])
+
+      if (storageError) {
+        console.error('Erro ao remover arquivo de certificado:', storageError)
+      }
+
+      const { error: updateError } = await supabase
+        .from('certificado_templates')
+        .update({ imagem_url: null, atualizado_em: new Date().toISOString() })
+        .eq('tenant_id', activeTenantId)
+
+      if (updateError) {
+        console.error('Erro ao atualizar template de certificado:', updateError)
+        toast.error('Não foi possível atualizar o template de certificado.')
+        return
+      }
+
+      setTemplateImageUrl(null)
+      toast.success('Template de certificado removido com sucesso.')
+    } catch (error) {
+      console.error('Erro ao remover template de certificado:', error)
+      toast.error('Erro ao remover o template de certificado.')
+    } finally {
+      setTemplateUploading(false)
+    }
+  }
+
+  const saveTemplatePositions = async (positions: typeof camposPosicoes) => {
+    if (!activeTenantId) return
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from('certificado_templates').upsert(
+        {
+          tenant_id: activeTenantId,
+          imagem_url: templateImageUrl,
+          campos_posicoes: positions,
+          ativo: true,
+          atualizado_em: new Date().toISOString(),
+        },
+        { onConflict: 'tenant_id' }
+      )
+      if (error) {
+        console.error('Erro ao salvar posições do template de certificado:', error)
+        toast.error('Não foi possível salvar as posições do template.')
+        return
+      }
+      toast.success('Template salvo com sucesso.')
+    } catch (error) {
+      console.error('Erro ao salvar posições do template de certificado:', error)
+      toast.error('Erro ao salvar o template de certificado.')
+    }
+  }
+
+  const handlePreviewMouseMove = (event: any) => {
+    if (!draggingFieldRef.current || !previewRef.current) return
+
+    const rect = previewRef.current.getBoundingClientRect()
+    const offset = dragOffsetRef.current ?? { x: 0, y: 0 }
+
+    const centerX = event.clientX - rect.left - offset.x
+    const centerY = event.clientY - rect.top - offset.y
+
+    if (rect.width <= 0 || rect.height <= 0) return
+
+    let xPercent = (centerX / rect.width) * 100
+    let yPercent = (centerY / rect.height) * 100
+
+    xPercent = Math.min(95, Math.max(5, xPercent))
+    yPercent = Math.min(95, Math.max(5, yPercent))
+
+    const fieldKey = draggingFieldRef.current
+    setCamposPosicoes((prev) => ({
+      ...prev,
+      [fieldKey]: {
+        x: xPercent,
+        y: yPercent,
+      },
+    }))
+  }
+
+  const handlePreviewMouseUp = async () => {
+    if (!draggingFieldRef.current) return
+    const positions = { ...camposPosicoes }
+    draggingFieldRef.current = null
+    dragOffsetRef.current = null
+    await saveTemplatePositions(positions)
+  }
+
+  const handleFieldMouseDown = (
+    event: any,
+    field: keyof typeof camposPosicoes
+  ) => {
+    if (!previewRef.current) return
+    event.preventDefault()
+    const rect = previewRef.current.getBoundingClientRect()
+    const elementRect = (event.currentTarget as HTMLDivElement).getBoundingClientRect()
+
+    const elementCenterX = elementRect.left - rect.left + elementRect.width / 2
+    const elementCenterY = elementRect.top - rect.top + elementRect.height / 2
+
+    const offsetX = event.clientX - (rect.left + elementCenterX)
+    const offsetY = event.clientY - (rect.top + elementCenterY)
+
+    draggingFieldRef.current = field
+    dragOffsetRef.current = { x: offsetX, y: offsetY }
+  }
 
   const openNewSheet = () => {
     setEditingItem(null)
@@ -383,10 +636,222 @@ export default function CatalogoPage() {
           </p>
         </div>
         {canManage && (
-          <Button onClick={openNewSheet} className="w-full sm:w-auto shrink-0 bg-[#00C9A7] hover:bg-[#00C9A7]/90">
-            <Plus className="w-4 h-4" />
-            Novo Treinamento
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <Dialog
+              open={templateDialogOpen}
+              onOpenChange={(open) => {
+                setTemplateDialogOpen(open)
+                if (open) {
+                  loadTemplate()
+                }
+              }}
+            >
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!activeTenantId}
+                className="w-full sm:w-auto shrink-0 border-[#00C9A7] text-[#00C9A7] hover:bg-[#00C9A7]/5"
+                onClick={() => setTemplateDialogOpen(true)}
+              >
+                <Award className="w-4 h-4 mr-1.5" />
+                Template de Certificado
+              </Button>
+              <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="font-serif text-2xl font-bold">
+                    Template de Certificado
+                  </DialogTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Configure a arte base do certificado para todos os treinamentos deste tenant.
+                  </p>
+                </DialogHeader>
+
+                <div className="flex flex-col gap-6 pt-2">
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-medium text-foreground">Upload da arte</h3>
+                    <div className="flex flex-col gap-3">
+                      <label
+                        htmlFor="certificado-template-upload"
+                        className={cn(
+                          'border border-dashed rounded-lg px-4 py-6 flex flex-col items-center justify-center text-center cursor-pointer transition-colors',
+                          'border-muted-foreground/40 hover:border-[#00C9A7] hover:bg-[#00C9A7]/5'
+                        )}
+                      >
+                        <Upload className="w-7 h-7 text-[#00C9A7] mb-2" />
+                        <span className="text-sm font-medium text-foreground">
+                          Arraste e solte uma imagem aqui
+                        </span>
+                        <span className="text-xs text-muted-foreground mt-1">
+                          ou clique para selecionar um arquivo PNG ou JPG (até 5MB)
+                        </span>
+                        <input
+                          id="certificado-template-upload"
+                          type="file"
+                          accept="image/png,image/jpeg"
+                          className="hidden"
+                          onChange={handleTemplateFileChange}
+                          disabled={templateUploading || templateLoading}
+                        />
+                      </label>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRemoveTemplate}
+                          disabled={templateUploading || templateLoading || !templateImageUrl}
+                        >
+                          Remover
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-medium text-foreground">Preview</h3>
+                    {templateLoading ? (
+                      <Skeleton className="w-full aspect-[16/9] rounded-lg" />
+                    ) : templateImageUrl ? (
+                      <div
+                        ref={previewRef}
+                        className="relative w-full aspect-[16/9] rounded-lg overflow-hidden border border-border bg-muted"
+                        onMouseMove={handlePreviewMouseMove}
+                        onMouseUp={handlePreviewMouseUp}
+                        onMouseLeave={handlePreviewMouseUp}
+                      >
+                        <div
+                          className="absolute inset-0 bg-center bg-cover"
+                          style={{ backgroundImage: `url(${templateImageUrl})` }}
+                        />
+                        <div className="absolute inset-0 bg-black/10" />
+
+                        {/* Nome */}
+                        <div
+                          className={cn(
+                            'absolute text-center text-white font-semibold drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]',
+                            'cursor-grab hover:outline hover:outline-1 hover:outline-dashed hover:outline-white/70'
+                          )}
+                          style={{
+                            left: `${camposPosicoes.nome.x}%`,
+                            top: `${camposPosicoes.nome.y}%`,
+                            transform: 'translate(-50%, -50%)',
+                          }}
+                          onMouseDown={(event) => handleFieldMouseDown(event, 'nome')}
+                        >
+                          <span className="text-xl sm:text-2xl">João da Silva</span>
+                        </div>
+
+                        {/* Treinamento */}
+                        <div
+                          className={cn(
+                            'absolute text-center text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]',
+                            'cursor-grab hover:outline hover:outline-1 hover:outline-dashed hover:outline-white/70'
+                          )}
+                          style={{
+                            left: `${camposPosicoes.treinamento.x}%`,
+                            top: `${camposPosicoes.treinamento.y}%`,
+                            transform: 'translate(-50%, -50%)',
+                          }}
+                          onMouseDown={(event) => handleFieldMouseDown(event, 'treinamento')}
+                        >
+                          <span className="text-base sm:text-lg font-medium">
+                            Nome do Treinamento
+                          </span>
+                        </div>
+
+                        {/* Carga horária */}
+                        <div
+                          className={cn(
+                            'absolute text-center text-white text-xs sm:text-sm drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]',
+                            'cursor-grab hover:outline hover:outline-1 hover:outline-dashed hover:outline-white/70'
+                          )}
+                          style={{
+                            left: `${camposPosicoes.carga_horaria.x}%`,
+                            top: `${camposPosicoes.carga_horaria.y}%`,
+                            transform: 'translate(-50%, -50%)',
+                          }}
+                          onMouseDown={(event) => handleFieldMouseDown(event, 'carga_horaria')}
+                        >
+                          <span>40 horas</span>
+                        </div>
+
+                        {/* Data */}
+                        <div
+                          className={cn(
+                            'absolute text-center text-white text-xs sm:text-sm drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]',
+                            'cursor-grab hover:outline hover:outline-1 hover:outline-dashed hover:outline-white/70'
+                          )}
+                          style={{
+                            left: `${camposPosicoes.data.x}%`,
+                            top: `${camposPosicoes.data.y}%`,
+                            transform: 'translate(-50%, -50%)',
+                          }}
+                          onMouseDown={(event) => handleFieldMouseDown(event, 'data')}
+                        >
+                          <span>
+                            {new Date().toLocaleDateString('pt-BR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-full aspect-[16/9] rounded-lg border border-dashed border-muted-foreground/40 bg-muted flex items-center justify-center text-center px-6">
+                        <p className="text-sm text-muted-foreground">
+                          Faça upload da arte do certificado para visualizar o preview aqui.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 text-blue-500 px-2 py-0.5">
+                        <span className="text-[10px]">🔵</span>
+                        Nome
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 text-green-500 px-2 py-0.5">
+                        <span className="text-[10px]">🟢</span>
+                        Treinamento
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/10 text-yellow-500 px-2 py-0.5">
+                        <span className="text-[10px]">🟡</span>
+                        Carga Horária
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 text-red-500 px-2 py-0.5">
+                        <span className="text-[10px]">🔴</span>
+                        Data
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Arraste os campos para posicioná-los na arte.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <Button
+                    type="button"
+                    onClick={() => saveTemplatePositions(camposPosicoes)}
+                    disabled={templateUploading || templateLoading || !templateImageUrl}
+                    className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
+                  >
+                    Salvar Template
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <Button
+              onClick={openNewSheet}
+              className="w-full sm:w-auto shrink-0 bg-[#00C9A7] hover:bg-[#00C9A7]/90"
+            >
+              <Plus className="w-4 h-4" />
+              Novo Treinamento
+            </Button>
+          </div>
         )}
       </div>
 
