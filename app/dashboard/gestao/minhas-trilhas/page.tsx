@@ -15,6 +15,7 @@ import {
   GraduationCap,
   LogOut,
   ChevronLeft,
+  CheckCircle2,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -37,10 +38,16 @@ interface TreinamentoRow {
   nome: string
   carga_horaria: number
   data_treinamento: string
+   indice_satisfacao: number | null
   empresas_parceiras: { nome: string } | null
 }
 
 type TipoTreinamento = 'parceiro' | 'colaborador' | string
+
+type PesquisaStatus = {
+  status: 'respondida' | 'pendente' | 'dispensado' | 'na'
+  token?: string
+}
 
 const tipoLabel: Record<TipoTreinamento, string> = {
   parceiro: 'Parceiro',
@@ -69,6 +76,9 @@ export default function MinhasTrilhasPage() {
     imagem_url: string | null
     campos_posicoes: any
   } | null>(null)
+  const [tokensByTreinamento, setTokensByTreinamento] = useState<
+    Map<string, { token: string; usado: boolean }>
+  >(new Map())
 
   useEffect(() => {
     if (!activeTenantId || !user?.email) {
@@ -127,7 +137,7 @@ export default function MinhasTrilhasPage() {
         const { data: trData, error: trErr } = await supabase
           .from('treinamentos')
           .select(
-            'id, codigo, tipo, nome, carga_horaria, data_treinamento, empresas_parceiras(nome)'
+            'id, codigo, tipo, nome, carga_horaria, data_treinamento, indice_satisfacao, empresas_parceiras(nome)'
           )
           .eq('tenant_id', activeTenantId)
           .in('id', treinamentoIds)
@@ -135,7 +145,35 @@ export default function MinhasTrilhasPage() {
 
         if (trErr) throw trErr
 
-        setTreinamentos(((trData ?? []) as TreinamentoRow[]) ?? [])
+        const treinamentosCarregados = ((trData ?? []) as TreinamentoRow[]) ?? []
+        setTreinamentos(treinamentosCarregados)
+
+        // 4b. Buscar tokens de pesquisa vinculados ao usuário para esses treinamentos
+        if (treinamentosCarregados.length > 0) {
+          const { data: tokensData, error: tokensErr } = await supabase
+            .from('pesquisa_tokens')
+            .select('treinamento_id, token, usado')
+            .eq('tenant_id', activeTenantId)
+            .eq('respondente_email', user.email)
+            .in(
+              'treinamento_id',
+              treinamentosCarregados.map((t) => t.id)
+            )
+
+          if (tokensErr) {
+            console.error('Erro ao carregar tokens de pesquisa:', tokensErr)
+          } else {
+            const map = new Map<string, { token: string; usado: boolean }>()
+            ;(tokensData ?? []).forEach(
+              (row: { treinamento_id: string; token: string; usado: boolean }) => {
+                map.set(row.treinamento_id, { token: row.token, usado: row.usado })
+              }
+            )
+            setTokensByTreinamento(map)
+          }
+        } else {
+          setTokensByTreinamento(new Map())
+        }
 
         // 5. Buscar template de certificado do tenant
         const { data: templateData, error: templateErr } = await supabase
@@ -198,6 +236,21 @@ export default function MinhasTrilhasPage() {
         .join('')
         .toUpperCase()
     : '—'
+
+  const getPesquisaStatus = (t: TreinamentoRow): PesquisaStatus => {
+    if (t.indice_satisfacao !== null && t.indice_satisfacao !== 0) {
+      return { status: 'dispensado' }
+    }
+    const tokenData = tokensByTreinamento.get(t.id)
+    if (!tokenData) return { status: 'na' }
+    if (tokenData.usado) return { status: 'respondida', token: tokenData.token }
+    return { status: 'pendente', token: tokenData.token }
+  }
+
+  const certificadoLiberado = (t: TreinamentoRow): boolean => {
+    const ps = getPesquisaStatus(t)
+    return ps.status === 'respondida' || ps.status === 'dispensado' || ps.status === 'na'
+  }
 
   const handleBaixarCertificado = async (treinamento: TreinamentoRow) => {
     if (!certificadoTemplate?.imagem_url) {
@@ -396,7 +449,48 @@ export default function MinhasTrilhasPage() {
                     {formatDate(t.data_treinamento)}
                   </TableCell>
                   <TableCell className="text-center">
-                    {certificadoTemplate?.imagem_url ? (
+                    {(() => {
+                      const ps = getPesquisaStatus(t)
+                      if (ps.status === 'dispensado') {
+                        return (
+                          <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/40">
+                            Dispensado
+                          </Badge>
+                        )
+                      }
+                      if (ps.status === 'respondida') {
+                        return (
+                          <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/40 gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Respondida
+                          </Badge>
+                        )
+                      }
+                      if (ps.status === 'pendente' && ps.token) {
+                        return (
+                          <Badge
+                            className="bg-muted text-muted-foreground border border-border/60 cursor-pointer hover:bg-muted/80"
+                            onClick={() => {
+                              const origin =
+                                typeof window !== 'undefined'
+                                  ? window.location.origin
+                                  : 'https://trainhub-app.vercel.app'
+                              window.open(`${origin}/pesquisa/${ps.token}`, '_blank')
+                            }}
+                          >
+                            Pendente
+                          </Badge>
+                        )
+                      }
+                      return (
+                        <Badge className="bg-muted text-muted-foreground border border-border/60">
+                          N/A
+                        </Badge>
+                      )
+                    })()}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {certificadoTemplate?.imagem_url && certificadoLiberado(t) ? (
                       <button
                         type="button"
                         onClick={() => handleBaixarCertificado(t)}
@@ -420,7 +514,11 @@ export default function MinhasTrilhasPage() {
                         type="button"
                         disabled
                         className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-muted-foreground bg-muted cursor-not-allowed"
-                        title="Template de certificado não configurado"
+                        title={
+                          certificadoTemplate?.imagem_url
+                            ? 'Responda a pesquisa para liberar o certificado'
+                            : 'Template de certificado não configurado'
+                        }
                       >
                         <Download className="w-3.5 h-3.5" />
                         Baixar
