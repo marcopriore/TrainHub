@@ -497,6 +497,13 @@ function ParceiroForm({
     navigator.clipboard.writeText(urls).then(() => toast.success('Todos os links copiados.'))
   }
 
+  const handleFecharLinkDialog = () => {
+    setLinksDialogOpen(false)
+    // Limpeza de estado local (dados do formulário já foram enviados)
+    setLinksGerados([])
+    onSuccess()
+  }
+
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
@@ -748,7 +755,14 @@ function ParceiroForm({
         {isSubmitting ? 'Salvando...' : 'Salvar Treinamento'}
       </Button>
 
-      <Dialog open={linksDialogOpen} onOpenChange={setLinksDialogOpen}>
+      <Dialog
+        open={linksDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleFecharLinkDialog()
+          }
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-serif">Links de pesquisa gerados</DialogTitle>
@@ -782,7 +796,7 @@ function ParceiroForm({
             <Button
               type="button"
               className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
-              onClick={() => { setLinksDialogOpen(false); onSuccess() }}
+              onClick={handleFecharLinkDialog}
             >
               Fechar e continuar
             </Button>

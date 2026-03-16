@@ -427,6 +427,7 @@ export default function MinhasTrilhasPage() {
                 <TableHead className="font-medium">Empresa Parceira</TableHead>
                 <TableHead className="font-medium text-center">Carga Horária</TableHead>
                 <TableHead className="font-medium text-center">Data</TableHead>
+                <TableHead className="font-medium text-center">Pesquisa</TableHead>
                 <TableHead className="font-medium text-center">Certificado</TableHead>
               </TableRow>
             </TableHeader>
@@ -475,7 +476,8 @@ export default function MinhasTrilhasPage() {
                                 typeof window !== 'undefined'
                                   ? window.location.origin
                                   : 'https://trainhub-app.vercel.app'
-                              window.open(`${origin}/pesquisa/${ps.token}`, '_blank')
+                              const url = `${origin}/pesquisa/${ps.token}`
+                              window.open(url, '_blank')
                             }}
                           >
                             Pendente
