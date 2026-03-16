@@ -38,6 +38,19 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { exportReportToExcel } from '@/lib/excel-utils'
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from '@/components/ui/popover'
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from '@/components/ui/command'
 
 const MESES_PT = [
   'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
@@ -102,12 +115,85 @@ export default function RelatoriosPage() {
   const [dataInicio, setDataInicio] = useState(defaultInicio)
   const [dataFim, setDataFim] = useState(defaultFim)
   const [filtroTipo, setFiltroTipo] = useState<string>('todos')
-  const [appliedFilters, setAppliedFilters] = useState({ dataInicio: defaultInicio, dataFim: defaultFim, filtroTipo: 'todos' })
+  const [cursoFilter, setCursoFilter] = useState<string>('')
+  const [turmaFilter, setTurmaFilter] = useState<string>('')
+  const [cursoSearch, setCursoSearch] = useState<string>('')
+  const [turmaSearch, setTurmaSearch] = useState<string>('')
+  const [cursoOptions, setCursoOptions] = useState<string[]>([])
+  const [turmaOptions, setTurmaOptions] = useState<string[]>([])
+  const [cursoOpen, setCursoOpen] = useState(false)
+  const [turmaOpen, setTurmaOpen] = useState(false)
+  const [appliedFilters, setAppliedFilters] = useState({
+    dataInicio: defaultInicio,
+    dataFim: defaultFim,
+    filtroTipo: 'todos',
+    curso: '',
+    turma: '',
+  })
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [treinamentos, setTreinamentos] = useState<Treinamento[]>([])
+  const [allTreinamentos, setAllTreinamentos] = useState<Treinamento[]>([])
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [tcData, setTcData] = useState<TreinamentoColaboradorRow[]>([])
   const supabase = createClient()
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+
+  const PAGE_SIZE = 20
+
+  const fetchCursos = async (search: string) => {
+    if (!activeTenantId) return
+    try {
+      let query = supabase
+        .from('treinamentos')
+        .select('nome')
+        .eq('tenant_id', activeTenantId)
+        .order('nome', { ascending: true })
+        .limit(20)
+
+      if (search.trim()) {
+        query = query.ilike('nome', `%${search.trim()}%`)
+      }
+
+      const { data, error } = await query
+      if (error) throw error
+      const nomes = (data ?? [])
+        .map((row: { nome: string | null }) => row.nome)
+        .filter((n): n is string => !!n && n.trim().length > 0)
+      const unique = Array.from(new Set(nomes))
+      setCursoOptions(unique)
+    } catch (err) {
+      console.error('Erro ao buscar cursos para filtro:', err)
+    }
+  }
+
+  const fetchTurmas = async (search: string) => {
+    if (!activeTenantId) return
+    try {
+      let query = supabase
+        .from('treinamentos')
+        .select('codigo')
+        .eq('tenant_id', activeTenantId)
+        .order('codigo', { ascending: false })
+        .limit(20)
+
+      if (search.trim()) {
+        query = query.ilike('codigo', `%${search.trim()}%`)
+      }
+
+      const { data, error } = await query
+      if (error) throw error
+      const codigos = (data ?? [])
+        .map((row: { codigo: string | null }) => row.codigo)
+        .filter((c): c is string => !!c && c.trim().length > 0)
+      const unique = Array.from(new Set(codigos))
+      setTurmaOptions(unique)
+    } catch (err) {
+      console.error('Erro ao buscar turmas para filtro:', err)
+    }
+  }
 
   const fetchData = async (silent = false) => {
     if (!silent) setLoading(true)
@@ -128,6 +214,12 @@ export default function RelatoriosPage() {
 
         if (appliedFilters.filtroTipo !== 'todos') {
           query = query.eq('tipo', appliedFilters.filtroTipo)
+        }
+        if (appliedFilters.curso) {
+          query = query.eq('nome', appliedFilters.curso)
+        }
+        if (appliedFilters.turma) {
+          query = query.eq('codigo', appliedFilters.turma)
         }
 
         const { data: trData, error: trErr } = await query.order('data_treinamento', { ascending: true })
@@ -199,6 +291,12 @@ export default function RelatoriosPage() {
         .lte('data_treinamento', appliedFilters.dataFim)
       if (appliedFilters.filtroTipo !== 'todos') {
         query = query.eq('tipo', appliedFilters.filtroTipo)
+      }
+      if (appliedFilters.curso) {
+        query = query.eq('nome', appliedFilters.curso)
+      }
+      if (appliedFilters.turma) {
+        query = query.eq('codigo', appliedFilters.turma)
       }
       const { data: trData, error: trErr } = await query.order('data_treinamento', { ascending: true })
       if (trErr) throw trErr
@@ -275,7 +373,13 @@ export default function RelatoriosPage() {
   }, [appliedFilters, activeTenantId])
 
   const handleAplicarFiltros = () => {
-    setAppliedFilters({ dataInicio, dataFim, filtroTipo })
+    setAppliedFilters({
+      dataInicio,
+      dataFim,
+      filtroTipo,
+      curso: cursoFilter,
+      turma: turmaFilter,
+    })
   }
 
   const handleLimparFiltros = () => {
@@ -283,7 +387,11 @@ export default function RelatoriosPage() {
     setDataInicio(inicio)
     setDataFim(fim)
     setFiltroTipo('todos')
-    setAppliedFilters({ dataInicio: inicio, dataFim: fim, filtroTipo: 'todos' })
+    setCursoFilter('')
+    setTurmaFilter('')
+    setCursoSearch('')
+    setTurmaSearch('')
+    setAppliedFilters({ dataInicio: inicio, dataFim: fim, filtroTipo: 'todos', curso: '', turma: '' })
   }
 
   const meses = useMemo(
@@ -398,6 +506,22 @@ export default function RelatoriosPage() {
       .sort((a, b) => b.totalHoras - a.totalHoras)
       .map((r, i) => ({ ...r, posicao: i + 1 }))
   }, [treinamentos])
+
+  useEffect(() => {
+    if (!cursoOpen || !activeTenantId) return
+    const handle = setTimeout(() => {
+      fetchCursos(cursoSearch)
+    }, 300)
+    return () => clearTimeout(handle)
+  }, [cursoOpen, cursoSearch, activeTenantId])
+
+  useEffect(() => {
+    if (!turmaOpen || !activeTenantId) return
+    const handle = setTimeout(() => {
+      fetchTurmas(turmaSearch)
+    }, 300)
+    return () => clearTimeout(handle)
+  }, [turmaOpen, turmaSearch, activeTenantId])
 
   const handleExportarExcel = () => {
     setExporting(true)
@@ -585,6 +709,120 @@ export default function RelatoriosPage() {
                 </SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm">Curso</Label>
+            <Popover open={cursoOpen} onOpenChange={(open) => {
+              setCursoOpen(open)
+              if (open && cursoOptions.length === 0) {
+                fetchCursos('')
+              }
+            }}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-[220px] justify-between"
+                >
+                  <span className="truncate">
+                    {cursoFilter || 'Todos os cursos'}
+                  </span>
+                  <span className="ml-2 text-xs text-muted-foreground">▼</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[260px] p-0">
+                <Command>
+                  <CommandInput
+                    placeholder="Buscar curso..."
+                    value={cursoSearch}
+                    onValueChange={setCursoSearch}
+                  />
+                  <CommandList>
+                    <CommandEmpty>Nenhum curso encontrado.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="__all__"
+                        onSelect={() => {
+                          setCursoFilter('')
+                          setCursoSearch('')
+                          setCursoOpen(false)
+                        }}
+                      >
+                        Todos os cursos
+                      </CommandItem>
+                      {cursoOptions.map((nome) => (
+                        <CommandItem
+                          key={nome}
+                          value={nome}
+                          onSelect={(v) => {
+                            setCursoFilter(v)
+                            setCursoOpen(false)
+                          }}
+                        >
+                          {nome}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm">Turma</Label>
+            <Popover open={turmaOpen} onOpenChange={(open) => {
+              setTurmaOpen(open)
+              if (open && turmaOptions.length === 0) {
+                fetchTurmas('')
+              }
+            }}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-[180px] justify-between"
+                >
+                  <span className="truncate">
+                    {turmaFilter || 'Todas as turmas'}
+                  </span>
+                  <span className="ml-2 text-xs text-muted-foreground">▼</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[220px] p-0">
+                <Command>
+                  <CommandInput
+                    placeholder="Buscar turma..."
+                    value={turmaSearch}
+                    onValueChange={setTurmaSearch}
+                  />
+                  <CommandList>
+                    <CommandEmpty>Nenhuma turma encontrada.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="__all__"
+                        onSelect={() => {
+                          setTurmaFilter('')
+                          setTurmaSearch('')
+                          setTurmaOpen(false)
+                        }}
+                      >
+                        Todas as turmas
+                      </CommandItem>
+                      {turmaOptions.map((codigo) => (
+                        <CommandItem
+                          key={codigo}
+                          value={codigo}
+                          onSelect={(v) => {
+                            setTurmaFilter(v)
+                            setTurmaOpen(false)
+                          }}
+                        >
+                          {codigo}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
           <Button onClick={handleAplicarFiltros}>Aplicar Filtros</Button>
           <Button variant="outline" onClick={handleLimparFiltros}>

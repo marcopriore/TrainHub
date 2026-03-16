@@ -580,7 +580,7 @@ export default function HistoricoPage() {
             `
           )
           .eq('tenant_id', activeTenantId)
-          .order('data_treinamento', { ascending: false })
+          .order('codigo', { ascending: false })
         if (error) throw error
         setTreinamentos((data as Treinamento[]) ?? [])
         return
@@ -645,7 +645,7 @@ export default function HistoricoPage() {
           `
         )
         .in('id', ids)
-        .order('data_treinamento', { ascending: false })
+        .order('codigo', { ascending: false })
       if (error) throw error
       setTreinamentos((data as Treinamento[]) ?? [])
     } catch (error) {
