@@ -92,6 +92,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 
       <Link
         href="/dashboard"
+        prefetch
         onClick={onClose}
         className="flex items-center gap-2 px-6 py-2.5 text-xs font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground/80 transition-colors duration-200 border-b border-sidebar-border"
       >
@@ -120,6 +121,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
               <li key={href}>
                 <Link
                   href={href}
+                  prefetch
                   onClick={onClose}
                   className={cn(
                     'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group',
@@ -169,6 +171,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
                       <li key={href}>
                         <Link
                           href={href}
+                          prefetch
                           onClick={onClose}
                           className={cn(
                             'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 group',
@@ -203,6 +206,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       <div className="px-3 py-4 border-t border-sidebar-border">
         <Link
           href="/dashboard/perfil"
+          prefetch
           onClick={onClose}
           className="flex items-center gap-3 px-3 py-2 mb-1 hover:bg-sidebar-accent/40 rounded-lg cursor-pointer transition-all duration-200"
         >

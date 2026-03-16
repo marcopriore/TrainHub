@@ -116,53 +116,23 @@ export default function PesquisaRespostasPage() {
     const loadData = async () => {
       setLoading(true)
       try {
-        // Formulário
-        const { data: formData, error: formError } = await supabase
-          .from('pesquisa_formularios')
-          .select('id, nome, descricao')
-          .eq('id', id)
-          .eq('tenant_id', activeTenantId)
-          .maybeSingle()
-
-        if (formError) {
-          console.error(formError)
-          toast.error('Erro ao carregar formulário.')
-          router.push('/dashboard/gestao/pesquisas')
-          return
-        }
-
-        if (!formData) {
-          router.push('/dashboard/gestao/pesquisas')
-          return
-        }
-
-        if (cancelled) return
-        setFormulario(formData as Formulario)
-
-        // Perguntas do formulário
-        const { data: perguntasData, error: perguntasError } = await supabase
-          .from('pesquisa_perguntas')
-          .select('id, formulario_id, texto, tipo, ordem')
-          .eq('formulario_id', id)
-          .eq('tenant_id', activeTenantId)
-          .order('ordem', { ascending: true })
-
-        if (perguntasError) {
-          console.error(perguntasError)
-          toast.error('Erro ao carregar perguntas.')
-          return
-        }
-
-        const perguntasList = (perguntasData as Pergunta[]) ?? []
-        if (!cancelled) {
-          setPerguntas(perguntasList)
-        }
-
-        // Tokens respondidos com join em treinamentos
-        const { data: tokensData, error: tokensError } = await supabase
-          .from('pesquisa_tokens')
-          .select(
-            `
+        const [formResult, perguntasResult, tokensResult] = await Promise.all([
+          supabase
+            .from('pesquisa_formularios')
+            .select('id, nome, descricao')
+            .eq('id', id)
+            .eq('tenant_id', activeTenantId)
+            .maybeSingle(),
+          supabase
+            .from('pesquisa_perguntas')
+            .select('id, formulario_id, texto, tipo, ordem')
+            .eq('formulario_id', id)
+            .eq('tenant_id', activeTenantId)
+            .order('ordem', { ascending: true }),
+          supabase
+            .from('pesquisa_tokens')
+            .select(
+              `
               id,
               formulario_id,
               treinamento_id,
@@ -179,11 +149,53 @@ export default function PesquisaRespostasPage() {
                 data_treinamento
               )
             `
-          )
-          .eq('formulario_id', id)
-          .eq('tenant_id', activeTenantId)
-          .eq('usado', true)
-          .order('respondido_em', { ascending: false })
+            )
+            .eq('formulario_id', id)
+            .eq('tenant_id', activeTenantId)
+            .eq('usado', true)
+            .order('respondido_em', { ascending: false }),
+        ])
+
+        const { data: formData, error: formError } = formResult as {
+          data: Formulario | null
+          error: { message?: string } | null
+        }
+
+        if (formError) {
+          console.error(formError)
+          toast.error('Erro ao carregar formulário.')
+          router.push('/dashboard/gestao/pesquisas')
+          return
+        }
+
+        if (!formData) {
+          router.push('/dashboard/gestao/pesquisas')
+          return
+        }
+
+        if (cancelled) return
+        setFormulario(formData as Formulario)
+
+        const { data: perguntasData, error: perguntasError } = perguntasResult as {
+          data: Pergunta[] | null
+          error: { message?: string } | null
+        }
+
+        if (perguntasError) {
+          console.error(perguntasError)
+          toast.error('Erro ao carregar perguntas.')
+          return
+        }
+
+        const perguntasList = (perguntasData as Pergunta[]) ?? []
+        if (!cancelled) {
+          setPerguntas(perguntasList)
+        }
+
+        const { data: tokensData, error: tokensError } = tokensResult as {
+          data: TokenRow[] | null
+          error: { message?: string } | null
+        }
 
         if (tokensError) {
           console.error(tokensError)

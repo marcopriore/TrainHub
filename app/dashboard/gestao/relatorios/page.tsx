@@ -200,6 +200,7 @@ export default function RelatoriosPage() {
     try {
       if (!activeTenantId) {
         setTreinamentos([])
+        setAllTreinamentos([])
         setTcData([])
         setLoading(false)
         return
@@ -224,7 +225,9 @@ export default function RelatoriosPage() {
 
         const { data: trData, error: trErr } = await query.order('data_treinamento', { ascending: true })
         if (trErr) throw trErr
-        setTreinamentos((trData as unknown as Treinamento[]) ?? [])
+        const lista = (trData as unknown as Treinamento[]) ?? []
+        setTreinamentos(lista)
+        setAllTreinamentos(lista)
 
         const { data: tcRes, error: tcErr } = await supabase
           .from('treinamento_colaboradores')
@@ -237,7 +240,7 @@ export default function RelatoriosPage() {
         if (tcErr) throw tcErr
 
         const tcList = (tcRes as unknown as TreinamentoColaboradorRow[]) ?? []
-        const trIds = new Set((trData as unknown as Treinamento[])?.map((t) => t.id) ?? [])
+        const trIds = new Set(lista.map((t) => t.id))
         const filtered = tcList.filter((tc) => trIds.has(tc.treinamento_id))
         setTcData(filtered)
         return
@@ -246,6 +249,7 @@ export default function RelatoriosPage() {
       const userEmail = user?.email
       if (!userEmail) {
         setTreinamentos([])
+        setAllTreinamentos([])
         setTcData([])
         setLoading(false)
         return
@@ -260,6 +264,7 @@ export default function RelatoriosPage() {
 
       if (!colData) {
         setTreinamentos([])
+        setAllTreinamentos([])
         setTcData([])
         setLoading(false)
         return
@@ -278,6 +283,7 @@ export default function RelatoriosPage() {
       const ids = (tcIdsRes ?? []).map((r: { treinamento_id: string }) => r.treinamento_id)
       if (ids.length === 0) {
         setTreinamentos([])
+        setAllTreinamentos([])
         setTcData([])
         setLoading(false)
         return
@@ -300,9 +306,11 @@ export default function RelatoriosPage() {
       }
       const { data: trData, error: trErr } = await query.order('data_treinamento', { ascending: true })
       if (trErr) throw trErr
-      setTreinamentos((trData as unknown as Treinamento[]) ?? [])
+      const lista = (trData as unknown as Treinamento[]) ?? []
+      setTreinamentos(lista)
+      setAllTreinamentos(lista)
 
-      const trIds = new Set((trData as unknown as Treinamento[])?.map((t) => t.id) ?? [])
+      const trIds = new Set(lista.map((t) => t.id))
       const { data: tcRes, error: tcErr } = await supabase
         .from('treinamento_colaboradores')
         .select(`
@@ -319,6 +327,7 @@ export default function RelatoriosPage() {
       console.error('Erro ao carregar relatórios:', error)
       toast.error('Não foi possível carregar os dados. Tente novamente.')
       setTreinamentos([])
+      setAllTreinamentos([])
       setTcData([])
     } finally {
       setLoading(false)
@@ -332,6 +341,7 @@ export default function RelatoriosPage() {
   useEffect(() => {
     if (!activeTenantId) {
       setTreinamentos([])
+      setAllTreinamentos([])
       setTcData([])
       setLoading(false)
       return
@@ -401,7 +411,7 @@ export default function RelatoriosPage() {
 
   const horasPorPeriodo = useMemo(() => {
     return meses.map(({ mes, mesNum, ano }) => {
-      const doMes = treinamentos.filter((t) => {
+      const doMes = allTreinamentos.filter((t) => {
         const d = new Date(t.data_treinamento)
         return d.getMonth() === mesNum && d.getFullYear() === ano
       })
@@ -409,11 +419,11 @@ export default function RelatoriosPage() {
       const colaborador = doMes.filter((t) => t.tipo === 'colaborador').reduce((a, t) => a + (t.carga_horaria ?? 0), 0)
       return { mes, Parceiro: parceiro, Colaborador: colaborador }
     })
-  }, [treinamentos, meses])
+  }, [allTreinamentos, meses])
 
   const horasPorEmpresa = useMemo(() => {
     const map = new Map<string, { horas: number; qtd: number }>()
-    for (const t of treinamentos) {
+    for (const t of allTreinamentos) {
       const nome = t.empresas_parceiras?.nome ?? 'Sem empresa'
       const cur = map.get(nome) ?? { horas: 0, qtd: 0 }
       cur.horas += t.carga_horaria ?? 0
@@ -423,7 +433,7 @@ export default function RelatoriosPage() {
     return Array.from(map.entries())
       .map(([empresa, v]) => ({ empresa, totalHoras: v.horas, qtdTreinamentos: v.qtd }))
       .sort((a, b) => b.totalHoras - a.totalHoras)
-  }, [treinamentos])
+  }, [allTreinamentos])
 
   const horasPorSetor = useMemo(() => {
     const map = new Map<string, { horas: number; treinamentosIds: Set<string> }>()
@@ -445,7 +455,7 @@ export default function RelatoriosPage() {
 
   const indicesPorMes = useMemo(() => {
     return meses.map(({ mes, mesNum, ano }) => {
-      const doMes = treinamentos.filter((t) => {
+      const doMes = allTreinamentos.filter((t) => {
         const d = new Date(t.data_treinamento)
         return d.getMonth() === mesNum && d.getFullYear() === ano
       })
@@ -463,7 +473,7 @@ export default function RelatoriosPage() {
         mediaAprovacao: mediaAprov != null ? Number(mediaAprov.toFixed(1)) : null,
       }
     })
-  }, [treinamentos, meses])
+  }, [allTreinamentos, meses])
 
   const rankingColaboradores = useMemo(() => {
     const map = new Map<string, { nome: string; setor: string; horas: number; qtd: number }>()
@@ -485,7 +495,7 @@ export default function RelatoriosPage() {
 
   const rankingEmpresas = useMemo(() => {
     const map = new Map<string, { qtd: number; horas: number; sat: number[]; aprov: number[] }>()
-    for (const t of treinamentos) {
+    for (const t of allTreinamentos) {
       const nome = t.empresas_parceiras?.nome ?? 'Sem empresa'
       const cur = map.get(nome) ?? { qtd: 0, horas: 0, sat: [], aprov: [] }
       cur.qtd += 1
@@ -505,7 +515,7 @@ export default function RelatoriosPage() {
       }))
       .sort((a, b) => b.totalHoras - a.totalHoras)
       .map((r, i) => ({ ...r, posicao: i + 1 }))
-  }, [treinamentos])
+  }, [allTreinamentos])
 
   useEffect(() => {
     if (!cursoOpen || !activeTenantId) return
@@ -562,7 +572,7 @@ export default function RelatoriosPage() {
         mediaAprovacao: r.mediaAprovacao ?? '',
       }))
 
-      const treinamentosDetalhados = treinamentos.map((t) => ({
+      const treinamentosDetalhados = allTreinamentos.map((t) => ({
         codigo: t.codigo,
         tipo: t.tipo,
         empresaParceira: t.empresas_parceiras?.nome ?? '',
