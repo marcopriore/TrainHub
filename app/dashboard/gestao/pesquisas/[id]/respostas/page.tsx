@@ -9,6 +9,15 @@ import { useUser } from '@/lib/use-user'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 
 interface Formulario {
   id: string
@@ -70,6 +79,7 @@ export default function PesquisaRespostasPage() {
   const [perguntas, setPerguntas] = useState<Pergunta[]>([])
   const [respostasByToken, setRespostasByToken] = useState<Record<string, PerguntaComResposta[]>>({})
   const [loading, setLoading] = useState(true)
+  const [expandedTokenId, setExpandedTokenId] = useState<string | null>(null)
 
   const supabase = createClient()
 
@@ -242,14 +252,25 @@ export default function PesquisaRespostasPage() {
     return (
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
-          <Skeleton className="h-9 w-32" />
-          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-9 w-24" />
+          <Skeleton className="h-6 w-48" />
         </div>
         <Skeleton className="h-5 w-40" />
-        <div className="space-y-4">
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-32 w-full" />
+        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-border">
+            <Skeleton className="h-4 w-1/3" />
+          </div>
+          <div className="divide-y divide-border">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="px-4 py-3 flex items-center gap-4">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-4 w-32 hidden md:block" />
+                <Skeleton className="h-4 w-24 hidden md:block" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-32" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -265,7 +286,7 @@ export default function PesquisaRespostasPage() {
             asChild
             className="w-fit px-0 text-muted-foreground hover:text-foreground"
           >
-            <Link href={`/dashboard/gestao/pesquisas/${formulario.id}`}>← Voltar</Link>
+            <Link href="/dashboard/gestao/pesquisas">← Voltar</Link>
           </Button>
           <div>
             <h1 className="font-serif text-2xl font-bold text-foreground">{formulario.nome}</h1>
@@ -279,129 +300,170 @@ export default function PesquisaRespostasPage() {
           Nenhuma resposta recebida ainda.
         </div>
       ) : (
-        <div className="space-y-4">
-          {tokens.map((token) => {
-            const perguntasComRespostas = respostasByToken[token.id] ?? []
-            const respondenteNome =
-              token.respondente_nome ||
-              token.respondente_email ||
-              'Respondente sem identificação'
+        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/30 hover:bg-muted/30">
+                <TableHead className="font-medium">Nome</TableHead>
+                <TableHead className="font-medium hidden md:table-cell">E-mail</TableHead>
+                <TableHead className="font-medium">Tipo</TableHead>
+                <TableHead className="font-medium hidden md:table-cell">Treinamento</TableHead>
+                <TableHead className="font-medium">Data da Resposta</TableHead>
+                <TableHead className="font-medium w-16 text-right">Respostas</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tokens.map((token) => {
+                const perguntasComRespostas = respostasByToken[token.id] ?? []
+                const respondenteNome =
+                  token.respondente_nome ||
+                  token.respondente_email ||
+                  'Respondente sem identificação'
 
-            const tipo = token.respondente_tipo ?? 'indefinido'
-            const treinamentoNome = token.treinamento?.nome ?? 'Treinamento não informado'
-            const treinamentoData = token.treinamento?.data_treinamento
+                const tipo = token.respondente_tipo ?? 'indefinido'
+                const treinamentoNome = token.treinamento?.nome ?? 'Treinamento não informado'
+                const treinamentoData = token.treinamento?.data_treinamento
+                const isExpanded = expandedTokenId === token.id
 
-            return (
-              <div
-                key={token.id}
-                className="bg-card rounded-xl border border-border shadow-sm p-4 flex flex-col gap-4"
-              >
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-foreground">{respondenteNome}</span>
-                      {token.respondente_email && (
-                        <span className="text-xs text-muted-foreground">
-                          {token.respondente_email}
-                        </span>
-                      )}
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className={
-                        tipo === 'colaborador'
-                          ? 'border-blue-500/40 text-blue-600 bg-blue-500/5'
-                          : 'border-muted-foreground/40 text-muted-foreground bg-muted/30'
-                      }
+                const toggleRow = () => {
+                  setExpandedTokenId((current) => (current === token.id ? null : token.id))
+                }
+
+                return (
+                  <React.Fragment key={token.id}>
+                    <TableRow
+                      onClick={toggleRow}
+                      className={`cursor-pointer ${
+                        isExpanded ? 'bg-muted/40' : ''
+                      }`}
                     >
-                      {tipo === 'colaborador'
-                        ? 'Colaborador'
-                        : tipo === 'parceiro'
-                        ? 'Parceiro'
-                        : 'Outro'}
-                    </Badge>
-                  </div>
-                  <div className="text-xs text-muted-foreground flex flex-col items-start md:items-end gap-1">
-                    <span>
-                      Respondido em:{' '}
-                      <span className="font-medium text-foreground">
-                        {formatDateTime(token.respondido_em)}
-                      </span>
-                    </span>
-                    <span>
-                      Treinamento:{' '}
-                      <span className="font-medium text-foreground">{treinamentoNome}</span>
-                      {treinamentoData && (
-                        <span className="ml-1">
-                          ({formatTreinamentoDate(treinamentoData)})
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="border-t border-border pt-3 space-y-3">
-                  {perguntasComRespostas.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Nenhuma resposta registrada para este respondente.
-                    </p>
-                  ) : (
-                    perguntasComRespostas.map(({ pergunta, resposta }) => {
-                      const key = `${token.id}-${pergunta.id}`
-                      let conteudoResposta: React.ReactNode = '—'
-
-                      if (pergunta.tipo === 'escala') {
-                        const valor = resposta?.valor_numerico
-                        conteudoResposta =
-                          typeof valor === 'number' ? (
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center justify-center rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-foreground">
-                                {valor}
-                              </span>
-                              <div className="flex items-center gap-0.5">
-                                {Array.from({ length: 5 }).map((_, i) => (
-                                  <span
-                                    key={i}
-                                    className={
-                                      i < valor
-                                        ? 'text-yellow-400'
-                                        : 'text-muted-foreground/40'
-                                    }
-                                  >
-                                    ★
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          ) : (
-                            '—'
-                          )
-                      } else if (pergunta.tipo === 'multipla_escolha') {
-                        const opcao = resposta?.opcao_selecionada
-                        conteudoResposta = opcao ? (
-                          <Badge className="bg-muted text-foreground hover:bg-muted">
-                            {opcao}
-                          </Badge>
-                        ) : (
-                          '—'
-                        )
-                      } else if (pergunta.tipo === 'texto_livre') {
-                        const texto = resposta?.valor_texto?.trim()
-                        conteudoResposta = texto && texto.length > 0 ? texto : '—'
-                      }
-
-                      return (
-                        <div key={key} className="text-sm">
-                          <p className="font-medium text-foreground mb-0.5">{pergunta.texto}</p>
-                          <div className="text-sm text-foreground">{conteudoResposta}</div>
+                      <TableCell className="font-medium text-foreground">
+                        {respondenteNome}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground hidden md:table-cell">
+                        {token.respondente_email ?? '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={
+                            tipo === 'colaborador'
+                              ? 'border-blue-500/40 text-blue-600 bg-blue-500/5'
+                              : 'border-muted-foreground/40 text-muted-foreground bg-muted/30'
+                          }
+                        >
+                          {tipo === 'colaborador'
+                            ? 'Colaborador'
+                            : tipo === 'parceiro'
+                            ? 'Parceiro'
+                            : 'Outro'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <div className="flex flex-col">
+                          <span className="text-sm text-foreground">{treinamentoNome}</span>
+                          {treinamentoData && (
+                            <span className="text-xs text-muted-foreground">
+                              {formatTreinamentoDate(treinamentoData)}
+                            </span>
+                          )}
                         </div>
-                      )
-                    })
-                  )}
-                </div>
-              </div>
-            )
-          })}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDateTime(token.respondido_em)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleRow()
+                          }}
+                          className="inline-flex items-center justify-center rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted/80"
+                          aria-label={isExpanded ? 'Recolher respostas' : 'Ver respostas'}
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                    {isExpanded && (
+                      <TableRow className="bg-muted/30">
+                        <TableCell colSpan={6} className="p-4">
+                          {perguntasComRespostas.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                              Nenhuma resposta registrada para este respondente.
+                            </p>
+                          ) : (
+                            <div className="space-y-3">
+                              {perguntasComRespostas.map(({ pergunta, resposta }) => {
+                                const key = `${token.id}-${pergunta.id}`
+                                let conteudoResposta: React.ReactNode = '—'
+
+                                if (pergunta.tipo === 'escala') {
+                                  const valor = resposta?.valor_numerico
+                                  conteudoResposta =
+                                    typeof valor === 'number' ? (
+                                      <div className="flex items-center gap-2">
+                                        <span className="inline-flex items-center justify-center rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-foreground">
+                                          {valor}
+                                        </span>
+                                        <div className="flex items-center gap-0.5">
+                                          {Array.from({ length: 5 }).map((_, i) => (
+                                            <span
+                                              key={i}
+                                              className={
+                                                i < valor
+                                                  ? 'text-yellow-400'
+                                                  : 'text-muted-foreground/40'
+                                              }
+                                            >
+                                              ★
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      '—'
+                                    )
+                                } else if (pergunta.tipo === 'multipla_escolha') {
+                                  const opcao = resposta?.opcao_selecionada
+                                  conteudoResposta = opcao ? (
+                                    <Badge className="bg-muted text-foreground hover:bg-muted">
+                                      {opcao}
+                                    </Badge>
+                                  ) : (
+                                    '—'
+                                  )
+                                } else if (pergunta.tipo === 'texto_livre') {
+                                  const texto = resposta?.valor_texto?.trim()
+                                  conteudoResposta = texto && texto.length > 0 ? texto : '—'
+                                }
+
+                                return (
+                                  <div key={key} className="text-sm">
+                                    <p className="font-medium text-foreground mb-0.5">
+                                      {pergunta.texto}
+                                    </p>
+                                    <div className="text-sm text-foreground">
+                                      {conteudoResposta}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </React.Fragment>
+                )
+              })}
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>
