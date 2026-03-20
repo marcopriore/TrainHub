@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import Link from 'next/link'
-import { PlusCircle, Trash2, Building2, Users, FileSpreadsheet, Lock, Copy } from 'lucide-react'
+import { PlusCircle, Trash2, Building2, Users, FileSpreadsheet, Lock, Copy, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@/lib/use-user'
@@ -29,8 +29,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { TreinamentoImportDialog } from '@/components/treinamento-import-dialog'
 import { cn } from '@/lib/utils'
+import * as XLSX from 'xlsx-js-style'
+import { parseExcelFile, getExcelValue } from '@/lib/excel-utils'
 
 // ---------- Schemas ----------
 const baseSchema = z.object({
@@ -50,9 +60,7 @@ const baseSchema = z.object({
     .max(100, 'Valor entre 0 e 100'),
 })
 
-const parceiroSchema = baseSchema.extend({
-  quantidadePessoas: z.coerce.number().min(1, 'Informe a quantidade de pessoas'),
-})
+const parceiroSchema = baseSchema
 
 const colaboradorSchema = baseSchema.extend({
   colaboradores: z
@@ -415,6 +423,40 @@ function ParceiroForm({
   const [formularioSelecionado, setFormularioSelecionado] = useState<string | null>(null)
   const [linksDialogOpen, setLinksDialogOpen] = useState(false)
   const [linksGerados, setLinksGerados] = useState<{ token: string; respondente_nome: string | null }[]>([])
+  const [parceiros, setParceiros] = useState<{ nome: string; email: string }[]>([])
+  const [importWizardOpen, setImportWizardOpen] = useState(false)
+  const [importEtapa, setImportEtapa] = useState<1 | 2 | 3>(1)
+  const [dadosLidos, setDadosLidos] = useState<{ nome: string; email: string }[]>([])
+  const [fileImportado, setFileImportado] = useState<File | null>(null)
+  const [dragActive, setDragActive] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const handleParseFile = async (file: File) => {
+    try {
+      const rows = await parseExcelFile(file)
+      const aliases = { nome: ['Nome', 'nome'], email: ['E-mail', 'E-mail', 'email'] }
+      const parsed: { nome: string; email: string }[] = []
+      for (const row of rows) {
+        const nome = String(getExcelValue(row, 'nome', aliases) ?? '').trim()
+        const email = String(getExcelValue(row, 'email', aliases) ?? '').trim()
+        if (!nome && !email) continue
+        parsed.push({ nome, email })
+      }
+      const headerKeys = rows[0] ? Object.keys(rows[0]).map((k) => k.toLowerCase()) : []
+      const hasNome = headerKeys.some((k) => k.includes('nome'))
+      const hasEmail = headerKeys.some((k) => k.includes('e-mail') || k.includes('email'))
+      if (!hasNome || !hasEmail) {
+        toast.error('O arquivo deve ter colunas "Nome" e "E-mail".')
+        setDadosLidos([])
+        return
+      }
+      setDadosLidos(parsed)
+      if (parsed.length === 0) toast.info('Nenhum dado válido encontrado na planilha.')
+    } catch {
+      toast.error('Erro ao ler o arquivo. Verifique o formato.')
+      setDadosLidos([])
+    }
+  }
 
   const {
     register,
@@ -444,7 +486,7 @@ function ParceiroForm({
           objetivo: data.objetivo,
           carga_horaria: data.cargaHoraria,
           empresa_parceira_id: data.empresaParceiraId,
-          quantidade_pessoas: data.quantidadePessoas,
+          quantidade_pessoas: parceiros.length || 0,
           data_treinamento: data.dataTreinamento,
           indice_satisfacao: usarPesquisa ? null : data.indiceSatisfacao,
           indice_aprovacao: data.indiceAprovacao,
@@ -455,6 +497,18 @@ function ParceiroForm({
 
       if (error) throw error
       const novoTreinamentoId = (row as { id: string }).id
+
+      if (parceiros.length > 0) {
+        const { error: parceirosError } = await supabase.from('treinamento_parceiros').insert(
+          parceiros.map((p) => ({
+            treinamento_id: novoTreinamentoId,
+            tenant_id: tenantId,
+            nome: p.nome,
+            email: p.email,
+          }))
+        )
+        if (parceirosError) throw parceirosError
+      }
 
       let abriuDialog = false
       if (usarPesquisa && formularioSelecionado) {
@@ -622,17 +676,9 @@ function ParceiroForm({
         </FormField>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <FormField
-          label="Quantidade de Pessoas Treinadas"
-          error={errors.quantidadePessoas?.message}
-        >
-          <Input type="number" min={1} placeholder="0" {...register('quantidadePessoas')} />
-        </FormField>
-        <FormField label="Data do Treinamento" error={errors.dataTreinamento?.message}>
-          <Input type="date" {...register('dataTreinamento')} />
-        </FormField>
-      </div>
+      <FormField label="Data do Treinamento" error={errors.dataTreinamento?.message}>
+        <Input type="date" {...register('dataTreinamento')} />
+      </FormField>
 
       <div className="space-y-3">
         <Label className="text-sm font-medium text-foreground">Índice de Satisfação</Label>
@@ -747,6 +793,63 @@ function ParceiroForm({
         )}
       </div>
 
+      <div className="space-y-3">
+        <Label className="text-sm font-medium text-foreground">
+          Participantes do Treinamento ({parceiros.length} importados)
+        </Label>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setImportEtapa(1)
+              setDadosLidos([])
+              setFileImportado(null)
+              setImportWizardOpen(true)
+            }}
+            className="border-[#00C9A7] text-[#00C9A7] hover:bg-[#00C9A7]/10"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Importar Planilha
+          </Button>
+        </div>
+        {parceiros.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhum participante importado ainda.</p>
+        ) : (
+          <div className="rounded-lg border border-border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>E-mail</TableHead>
+                  <TableHead className="w-12" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {parceiros.map((p, idx) => (
+                  <TableRow key={`${p.email}-${idx}`}>
+                    <TableCell>{p.nome}</TableCell>
+                    <TableCell>{p.email}</TableCell>
+                    <TableCell>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => setParceiros((prev) => prev.filter((_, i) => i !== idx))}
+                        aria-label="Remover"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
+
       <Button
         type="submit"
         disabled={isSubmitting || (modoSatisfacao === 'pesquisa' && !formularioSelecionado && formulariosPesquisa.length > 0)}
@@ -754,6 +857,206 @@ function ParceiroForm({
       >
         {isSubmitting ? 'Salvando...' : 'Salvar Treinamento'}
       </Button>
+
+      <Dialog
+        open={importWizardOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setImportEtapa(1)
+            setDadosLidos([])
+            setFileImportado(null)
+          }
+          setImportWizardOpen(open)
+        }}
+      >
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Importar Participantes — Passo {importEtapa} de 3</DialogTitle>
+          </DialogHeader>
+          {importEtapa === 1 && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Baixe o template, preencha com Nome e E-mail dos participantes e volte para fazer o upload.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const wb = XLSX.utils.book_new()
+                  const ws = XLSX.utils.aoa_to_sheet([
+                    ['Nome', 'E-mail'],
+                    ['João da Silva', 'joao@email.com'],
+                    ['Maria Santos', 'maria@email.com'],
+                  ])
+                  XLSX.utils.book_append_sheet(wb, ws, 'Participantes')
+                  XLSX.writeFile(wb, 'template-participantes.xlsx')
+                }}
+                className="border-[#00C9A7] text-[#00C9A7] hover:bg-[#00C9A7]/10"
+              >
+                Baixar Template
+              </Button>
+            </div>
+          )}
+          {importEtapa === 2 && (
+            <div className="space-y-4">
+              <div
+                className={cn(
+                  'border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors',
+                  dragActive ? 'border-[#00C9A7] bg-[#00C9A7]/5' : 'border-muted-foreground/30 hover:border-[#00C9A7]/50'
+                )}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setDragActive(true)
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setDragActive(false)
+                  const f = e.dataTransfer.files[0]
+                  if (f?.name.match(/\.(xlsx|xls)$/i)) {
+                    setFileImportado(f)
+                    handleParseFile(f)
+                  } else {
+                    toast.error('Formato inválido. Use .xlsx ou .xls')
+                  }
+                }}
+                onClick={() => fileInputRef?.current?.click()}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) {
+                      setFileImportado(f)
+                      handleParseFile(f)
+                    }
+                  }}
+                />
+                <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  {fileImportado ? fileImportado.name : 'Arraste o arquivo ou clique para selecionar'}
+                </p>
+              </div>
+            </div>
+          )}
+          {importEtapa === 3 && (() => {
+            const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+            const emails = dadosLidos.map((r) => (r.email || '').toLowerCase().trim())
+            const validacoes = dadosLidos.map((r, i) => {
+              const nome = String(r.nome ?? '').trim()
+              const email = String(r.email ?? '').trim()
+              if (!nome) return { ...r, erro: 'Nome obrigatório' }
+              if (!email) return { ...r, erro: 'E-mail obrigatório' }
+              if (!EMAIL_REGEX.test(email)) return { ...r, erro: 'E-mail inválido' }
+              const dupIdx = emails.indexOf(email.toLowerCase())
+              if (dupIdx !== -1 && dupIdx !== i) return { ...r, erro: 'E-mail duplicado' }
+              return { ...r, erro: null }
+            })
+            const validos = validacoes.filter((v) => !v.erro)
+            const comErro = validacoes.filter((v) => v.erro)
+            return (
+              <div className="space-y-4">
+                <div className="rounded-lg border overflow-hidden max-h-64 overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>E-mail</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {validacoes.map((v, i) => (
+                        <TableRow key={i}>
+                          <TableCell>{v.nome}</TableCell>
+                          <TableCell>{v.email}</TableCell>
+                          <TableCell>
+                            {v.erro ? (
+                              <span className="text-destructive text-sm">❌ Erro: {v.erro}</span>
+                            ) : (
+                              <span className="text-emerald-600 text-sm">✅ Válido</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {validos.length} válidos, {comErro.length} com erro
+                </p>
+                {comErro.length > 0 && (
+                  <p className="text-sm text-destructive">Corrija os erros na planilha antes de importar</p>
+                )}
+              </div>
+            )
+          })()}
+          <DialogFooter>
+            {importEtapa === 1 && (
+              <Button
+                type="button"
+                className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
+                onClick={() => setImportEtapa(2)}
+              >
+                Continuar
+              </Button>
+            )}
+            {importEtapa === 2 && (
+              <Button
+                type="button"
+                className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
+                disabled={dadosLidos.length === 0}
+                onClick={() => setImportEtapa(3)}
+              >
+                Continuar
+              </Button>
+            )}
+            {importEtapa === 3 && (() => {
+              const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+              const emails = dadosLidos.map((r) => (r.email || '').toLowerCase().trim())
+              const validacoes = dadosLidos.map((r, i) => {
+                const nome = String(r.nome ?? '').trim()
+                const email = String(r.email ?? '').trim()
+                if (!nome) return true
+                if (!email) return true
+                if (!EMAIL_REGEX.test(email)) return true
+                const dupIdx = emails.indexOf(email.toLowerCase())
+                if (dupIdx !== -1 && dupIdx !== i) return true
+                return false
+              })
+              const temErro = validacoes.some(Boolean)
+              return (
+                <Button
+                  type="button"
+                  className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
+                  disabled={temErro}
+                  onClick={() => {
+                    const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+                    const emails = dadosLidos.map((r) => (r.email || '').toLowerCase().trim())
+                    const dadosValidos = dadosLidos.filter((r, i) => {
+                      const nome = String(r.nome ?? '').trim()
+                      const email = String(r.email ?? '').trim()
+                      if (!nome || !email || !EMAIL_REGEX.test(email)) return false
+                      const dupIdx = emails.indexOf(email.toLowerCase())
+                      return dupIdx === i
+                    })
+                    setParceiros(dadosValidos)
+                    setImportWizardOpen(false)
+                    setImportEtapa(1)
+                    setDadosLidos([])
+                    setFileImportado(null)
+                  }}
+                >
+                  Finalizar
+                </Button>
+              )
+            })()}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={linksDialogOpen}
@@ -842,6 +1145,7 @@ function ColaboradorForm({
     control,
     setValue,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<ColaboradorForm>({
     resolver: zodResolver(colaboradorSchema),
@@ -853,11 +1157,110 @@ function ColaboradorForm({
     mode: 'onChange',
   })
 
+  const [importWizardOpen, setImportWizardOpen] = useState(false)
+  const [importEtapa, setImportEtapa] = useState<1 | 2 | 3>(1)
+  const [dadosLidos, setDadosLidos] = useState<{ nome: string; email: string }[]>([])
+  const [dadosValidados, setDadosValidados] = useState<
+    { nome: string; email: string; status: 'valido' | 'erro'; motivo?: string; colaboradorId?: string }[]
+  >([])
+  const [dragActive, setDragActive] = useState(false)
+  const [fileImportado, setFileImportado] = useState<File | null>(null)
+  const [validando, setValidando] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const handleParseFileColaborador = async (file: File) => {
+    try {
+      const rows = await parseExcelFile(file)
+      const aliases = { nome: ['Nome', 'nome'], email: ['E-mail', 'E-mail', 'email'] }
+      const parsed: { nome: string; email: string }[] = []
+      for (const row of rows) {
+        const nome = String(getExcelValue(row, 'nome', aliases) ?? '').trim()
+        const email = String(getExcelValue(row, 'email', aliases) ?? '').trim()
+        if (!nome && !email) continue
+        parsed.push({ nome, email })
+      }
+      const headerKeys = rows[0] ? Object.keys(rows[0]).map((k) => k.toLowerCase()) : []
+      const hasNome = headerKeys.some((k) => k.includes('nome'))
+      const hasEmail = headerKeys.some((k) => k.includes('e-mail') || k.includes('email'))
+      if (!hasNome || !hasEmail) {
+        toast.error('O arquivo deve ter colunas "Nome" e "E-mail".')
+        setDadosLidos([])
+        return
+      }
+      setDadosLidos(parsed)
+      if (parsed.length === 0) toast.info('Nenhum dado válido encontrado na planilha.')
+    } catch {
+      toast.error('Erro ao ler o arquivo. Verifique o formato.')
+      setDadosLidos([])
+    }
+  }
+
   useEffect(() => {
     if (isColaboradorLimited && colaboradorLogado) {
       reset({ colaboradores: [{ colaboradorId: colaboradorLogado.id }] }, { keepDefaultValues: false })
     }
   }, [isColaboradorLimited, colaboradorLogado, reset])
+
+  useEffect(() => {
+    if (importEtapa !== 3 || dadosLidos.length === 0) {
+      setDadosValidados([])
+      setValidando(false)
+      return
+    }
+    if (!tenantId) {
+      setDadosValidados(
+        dadosLidos.map((r) => ({
+          ...r,
+          status: 'erro' as const,
+          motivo: 'Tenant não identificado',
+        }))
+      )
+      setValidando(false)
+      return
+    }
+    const runValidation = async () => {
+      setValidando(true)
+      const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      const emails = dadosLidos.map((r) => (r.email || '').toLowerCase().trim())
+      const basic: { nome: string; email: string; status: 'valido' | 'erro'; motivo?: string }[] = dadosLidos.map((r, i) => {
+        const nome = String(r.nome ?? '').trim()
+        const email = String(r.email ?? '').trim()
+        if (!nome) return { ...r, status: 'erro' as const, motivo: 'Nome obrigatório' }
+        if (!email) return { ...r, status: 'erro' as const, motivo: 'E-mail obrigatório' }
+        if (!EMAIL_REGEX.test(email)) return { ...r, status: 'erro' as const, motivo: 'E-mail inválido' }
+        const dupIdx = emails.indexOf(email.toLowerCase())
+        if (dupIdx !== -1 && dupIdx !== i) return { ...r, status: 'erro' as const, motivo: 'E-mail duplicado' }
+        return { ...r, status: 'valido' as const }
+      })
+      const emailsValidos = basic.filter((b) => b.status === 'valido').map((b) => (b.email || '').toLowerCase().trim())
+      const supabase = createClient()
+      const colaboradoresExistentes = await Promise.all(
+        emailsValidos.map((email) =>
+          supabase
+            .from('colaboradores')
+            .select('id, nome, email')
+            .eq('tenant_id', tenantId)
+            .eq('email', email)
+            .maybeSingle()
+        )
+      )
+      const emailToColab = new Map<string | null, { id: string }>()
+      colaboradoresExistentes.forEach((res, idx) => {
+        const email = emailsValidos[idx]
+        if (res.data?.id) emailToColab.set(email, { id: res.data.id })
+      })
+      const final: { nome: string; email: string; status: 'valido' | 'erro'; motivo?: string; colaboradorId?: string }[] = basic.map((b) => {
+        if (b.status === 'erro') return { ...b, colaboradorId: undefined }
+        const emailNorm = (b.email || '').toLowerCase().trim()
+        const colab = emailToColab.get(emailNorm)
+        if (!colab) return { ...b, status: 'erro' as const, motivo: 'Colaborador não cadastrado no sistema' }
+        return { ...b, colaboradorId: colab.id }
+      })
+      setDadosValidados(final)
+      setValidando(false)
+    }
+    runValidation()
+  }, [importEtapa, dadosLidos, tenantId])
 
   const { fields, append, remove } = useFieldArray({ control, name: 'colaboradores' })
 
@@ -1244,7 +1647,7 @@ function ColaboradorForm({
           </p>
         ) : (
           <>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -1254,6 +1657,22 @@ function ColaboradorForm({
               >
                 <PlusCircle className="w-4 h-4" />
                 Adicionar Colaborador
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setImportEtapa(1)
+                  setDadosLidos([])
+                  setDadosValidados([])
+                  setFileImportado(null)
+                  setImportWizardOpen(true)
+                }}
+                className="gap-2 border-[#00C9A7] text-[#00C9A7] hover:bg-[#00C9A7]/10"
+              >
+                <Upload className="w-4 h-4" />
+                Importar Planilha
               </Button>
             </div>
             {(errors.colaboradores as { message?: string } | undefined)?.message && (
@@ -1325,6 +1744,181 @@ function ColaboradorForm({
       >
         {isSubmitting ? 'Salvando...' : 'Salvar Treinamento'}
       </Button>
+
+      <Dialog
+        open={importWizardOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setImportEtapa(1)
+            setDadosLidos([])
+            setDadosValidados([])
+            setFileImportado(null)
+          }
+          setImportWizardOpen(open)
+        }}
+      >
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Importar Colaboradores — Passo {importEtapa} de 3</DialogTitle>
+          </DialogHeader>
+          {importEtapa === 1 && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Baixe o template, preencha com Nome e E-mail dos colaboradores e volte para fazer o upload.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const wb = XLSX.utils.book_new()
+                  const ws = XLSX.utils.aoa_to_sheet([
+                    ['Nome', 'E-mail'],
+                    ['João da Silva', 'joao@email.com'],
+                    ['Maria Santos', 'maria@email.com'],
+                  ])
+                  XLSX.utils.book_append_sheet(wb, ws, 'Colaboradores')
+                  XLSX.writeFile(wb, 'template-colaboradores.xlsx')
+                }}
+                className="border-[#00C9A7] text-[#00C9A7] hover:bg-[#00C9A7]/10"
+              >
+                Baixar Template
+              </Button>
+            </div>
+          )}
+          {importEtapa === 2 && (
+            <div className="space-y-4">
+              <div
+                className={cn(
+                  'border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors',
+                  dragActive ? 'border-[#00C9A7] bg-[#00C9A7]/5' : 'border-muted-foreground/30 hover:border-[#00C9A7]/50'
+                )}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setDragActive(true)
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setDragActive(false)
+                  const f = e.dataTransfer.files[0]
+                  if (f?.name.match(/\.(xlsx|xls)$/i)) {
+                    setFileImportado(f)
+                    handleParseFileColaborador(f)
+                  } else {
+                    toast.error('Formato inválido. Use .xlsx ou .xls')
+                  }
+                }}
+                onClick={() => fileInputRef?.current?.click()}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) {
+                      setFileImportado(f)
+                      handleParseFileColaborador(f)
+                    }
+                  }}
+                />
+                <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  {fileImportado ? fileImportado.name : 'Arraste o arquivo ou clique para selecionar'}
+                </p>
+              </div>
+            </div>
+          )}
+          {importEtapa === 3 && (
+            <div className="space-y-4">
+              {validando ? (
+                <p className="text-sm text-muted-foreground">Validando colaboradores...</p>
+              ) : (
+                <>
+                  <div className="rounded-lg border overflow-hidden max-h-64 overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>E-mail</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {dadosValidados.map((v, i) => (
+                          <TableRow key={i}>
+                            <TableCell>{v.nome}</TableCell>
+                            <TableCell>{v.email}</TableCell>
+                            <TableCell>
+                              {v.status === 'erro' ? (
+                                <span className="text-destructive text-sm">❌ Erro: {v.motivo}</span>
+                              ) : (
+                                <span className="text-emerald-600 text-sm">✅ Válido</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {dadosValidados.filter((d) => d.status === 'valido').length} válidos,{' '}
+                    {dadosValidados.filter((d) => d.status === 'erro').length} com erro
+                  </p>
+                  {dadosValidados.some((d) => d.status === 'erro') && (
+                    <p className="text-sm text-destructive">Corrija todos os erros antes de importar</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            {importEtapa === 1 && (
+              <Button
+                type="button"
+                className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
+                onClick={() => setImportEtapa(2)}
+              >
+                Continuar
+              </Button>
+            )}
+            {importEtapa === 2 && (
+              <Button
+                type="button"
+                className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
+                disabled={dadosLidos.length === 0}
+                onClick={() => setImportEtapa(3)}
+              >
+                Continuar
+              </Button>
+            )}
+            {importEtapa === 3 && !validando && (
+              <Button
+                type="button"
+                className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
+                disabled={dadosValidados.some((d) => d.status === 'erro')}
+                onClick={() => {
+                  const currentIds = (watch('colaboradores') ?? []).map((c) => c.colaboradorId).filter(Boolean) as string[]
+                  for (const v of dadosValidados) {
+                    if (v.status === 'valido' && v.colaboradorId && !currentIds.includes(v.colaboradorId)) {
+                      append({ colaboradorId: v.colaboradorId })
+                      currentIds.push(v.colaboradorId)
+                    }
+                  }
+                  setImportWizardOpen(false)
+                  setImportEtapa(1)
+                  setDadosLidos([])
+                  setDadosValidados([])
+                  setFileImportado(null)
+                }}
+              >
+                Finalizar
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={linksDialogOpen}
