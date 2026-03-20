@@ -14,6 +14,9 @@ import {
   Building2,
   PlusCircle,
   Search,
+  Download,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form'
 import { z } from 'zod'
@@ -72,6 +75,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import * as XLSX from 'xlsx-js-style'
 
 interface Treinamento {
   id: string
@@ -537,6 +541,12 @@ export default function HistoricoPage() {
   const canView = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('visualizar_historico')
   const canEdit = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('editar_treinamento')
   const canDelete = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('excluir_treinamento')
+  const canExportExcel = user?.isMaster() || user?.isAdmin?.() || user?.hasPermission?.('exportar_excel')
+
+  const ITENS_POR_PAGINA = 20
+  const [paginaAtual, setPaginaAtual] = useState(1)
+  const [totalRegistros, setTotalRegistros] = useState(0)
+  const [exportando, setExportando] = useState(false)
   const activeTenantId = getActiveTenantId()
   const [treinamentos, setTreinamentos] = useState<Treinamento[]>([])
   const [empresas, setEmpresas] = useState<EmpresaParceira[]>([])
@@ -587,6 +597,7 @@ export default function HistoricoPage() {
   const fetchTreinamentos = async (silent = false) => {
     if (!activeTenantId) {
       setTreinamentos([])
+      setTotalRegistros(0)
       setLoading(false)
       return
     }
@@ -594,35 +605,44 @@ export default function HistoricoPage() {
     try {
       const participanteIds = idsPorParticipante
 
+      const selectCols = `
+        id,
+        codigo,
+        tipo,
+        nome,
+        conteudo,
+        objetivo,
+        carga_horaria,
+        empresa_parceira_id,
+        quantidade_pessoas,
+        data_treinamento,
+        indice_satisfacao,
+        indice_aprovacao,
+        criado_em,
+        tenant_id,
+        empresas_parceiras(nome)
+      `
+
       if (user?.isMaster() || user?.isAdmin?.()) {
         let query = supabase
           .from('treinamentos')
-          .select(
-            `
-              id,
-              codigo,
-              tipo,
-              nome,
-              conteudo,
-              objetivo,
-              carga_horaria,
-              empresa_parceira_id,
-              quantidade_pessoas,
-              data_treinamento,
-              indice_satisfacao,
-              indice_aprovacao,
-              criado_em,
-              tenant_id,
-              empresas_parceiras(nome)
-            `
-          )
+          .select(selectCols, { count: 'exact' })
           .eq('tenant_id', activeTenantId)
         if (participanteIds !== null) {
           query = query.in('id', participanteIds.length > 0 ? participanteIds : ['__empty__'])
         }
-        const { data, error } = await query.order('codigo', { ascending: false })
+        if (filtroTipo !== 'todos') query = query.eq('tipo', filtroTipo)
+        if (filtroEmpresa !== 'todas') query = query.eq('empresa_parceira_id', filtroEmpresa)
+        if (filtroDataInicio) query = query.gte('data_treinamento', filtroDataInicio)
+        if (filtroDataFim) query = query.lte('data_treinamento', filtroDataFim)
+        const from = (paginaAtual - 1) * ITENS_POR_PAGINA
+        const to = paginaAtual * ITENS_POR_PAGINA - 1
+        const { data, error, count } = await query
+          .order('codigo', { ascending: false })
+          .range(from, to)
         if (error) throw error
-        setTreinamentos((data as Treinamento[]) ?? [])
+        setTreinamentos((data as unknown as Treinamento[]) ?? [])
+        setTotalRegistros(count ?? 0)
         return
       }
 
@@ -662,35 +682,27 @@ export default function HistoricoPage() {
       }
       if (ids.length === 0) {
         setTreinamentos([])
+        setTotalRegistros(0)
         setLoading(false)
         return
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('treinamentos')
-        .select(
-          `
-            id,
-            codigo,
-            tipo,
-            nome,
-            conteudo,
-            objetivo,
-            carga_horaria,
-            empresa_parceira_id,
-            quantidade_pessoas,
-            data_treinamento,
-            indice_satisfacao,
-            indice_aprovacao,
-            criado_em,
-            tenant_id,
-            empresas_parceiras(nome)
-          `
-        )
+        .select(selectCols, { count: 'exact' })
         .in('id', ids)
+      if (filtroTipo !== 'todos') query = query.eq('tipo', filtroTipo)
+      if (filtroEmpresa !== 'todas') query = query.eq('empresa_parceira_id', filtroEmpresa)
+      if (filtroDataInicio) query = query.gte('data_treinamento', filtroDataInicio)
+      if (filtroDataFim) query = query.lte('data_treinamento', filtroDataFim)
+      const from = (paginaAtual - 1) * ITENS_POR_PAGINA
+      const to = paginaAtual * ITENS_POR_PAGINA - 1
+      const { data, error, count } = await query
         .order('codigo', { ascending: false })
+        .range(from, to)
       if (error) throw error
-      setTreinamentos((data as Treinamento[]) ?? [])
+      setTreinamentos((data as unknown as Treinamento[]) ?? [])
+      setTotalRegistros(count ?? 0)
     } catch (error) {
       console.error('Erro ao carregar treinamentos:', error)
       toast.error('Não foi possível carregar os treinamentos. Tente novamente.')
@@ -804,17 +816,11 @@ export default function HistoricoPage() {
       clearInterval(pollId)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [activeTenantId, idsPorParticipante])
+  }, [activeTenantId, idsPorParticipante, paginaAtual, filtroTipo, filtroEmpresa, filtroDataInicio, filtroDataFim])
 
-  const filtered = treinamentos.filter((t) => {
-    const matchTipo = filtroTipo === 'todos' || t.tipo === filtroTipo
-    const matchEmpresa =
-      filtroEmpresa === 'todas' || t.empresa_parceira_id === filtroEmpresa
-    const dataStr = t.data_treinamento
-    const matchDataInicio = !filtroDataInicio || dataStr >= filtroDataInicio
-    const matchDataFim = !filtroDataFim || dataStr <= filtroDataFim
-    return matchTipo && matchEmpresa && matchDataInicio && matchDataFim
-  })
+  useEffect(() => {
+    setPaginaAtual(1)
+  }, [filtroTipo, filtroEmpresa, filtroDataInicio, filtroDataFim, idsPorParticipante])
 
   const handleLimparFiltros = () => {
     setFiltroTipo('todos')
@@ -823,7 +829,25 @@ export default function HistoricoPage() {
     setFiltroDataFim('')
     setFiltroParticipante('')
     setIdsPorParticipante(null)
+    setPaginaAtual(1)
   }
+
+  const totalPaginas = Math.ceil(totalRegistros / ITENS_POR_PAGINA) || 1
+  const inicio = totalRegistros === 0 ? 0 : (paginaAtual - 1) * ITENS_POR_PAGINA + 1
+  const fim = Math.min(paginaAtual * ITENS_POR_PAGINA, totalRegistros)
+
+  const paginasParaExibir = useMemo(() => {
+    const paginas: number[] = []
+    const delta = 2
+    let start = Math.max(1, paginaAtual - delta)
+    let end = Math.min(totalPaginas, paginaAtual + delta)
+    if (end - start < 4) {
+      if (start === 1) end = Math.min(totalPaginas, 5)
+      else if (end === totalPaginas) start = Math.max(1, totalPaginas - 4)
+    }
+    for (let i = start; i <= end; i++) paginas.push(i)
+    return paginas
+  }, [paginaAtual, totalPaginas])
 
   const handleVerDetalhes = async (t: Treinamento) => {
     setSelectedTreinamento(t)
@@ -864,7 +888,7 @@ export default function HistoricoPage() {
         .eq('tenant_id', activeTenantId)
         .order('nome', { ascending: true })
       if (colErr) throw colErr
-      setColaboradoresList((colData as ColaboradorWithSetorEdit[]) ?? [])
+      setColaboradoresList((colData as unknown as ColaboradorWithSetorEdit[]) ?? [])
 
       if (t.tipo === 'colaborador') {
         const { data: tcData, error: tcErr } = await supabase
@@ -993,20 +1017,256 @@ export default function HistoricoPage() {
     return `${dia}/${mes}/${ano}`
   }
 
+  const exportarExcel = async () => {
+    if (!activeTenantId || !canExportExcel) return
+    setExportando(true)
+    try {
+      const participanteIds = idsPorParticipante
+      let data: Treinamento[] = []
+
+      const selectColsExport = `
+        id,
+        codigo,
+        tipo,
+        nome,
+        carga_horaria,
+        empresa_parceira_id,
+        data_treinamento,
+        indice_satisfacao,
+        indice_aprovacao,
+        tenant_id,
+        empresas_parceiras(nome)
+      `
+
+      if (user?.isMaster() || user?.isAdmin?.()) {
+        let query = supabase
+          .from('treinamentos')
+          .select(selectColsExport)
+          .eq('tenant_id', activeTenantId)
+        if (participanteIds !== null) {
+          query = query.in('id', participanteIds.length > 0 ? participanteIds : ['__empty__'])
+        }
+        if (filtroTipo !== 'todos') query = query.eq('tipo', filtroTipo)
+        if (filtroEmpresa !== 'todas') query = query.eq('empresa_parceira_id', filtroEmpresa)
+        if (filtroDataInicio) query = query.gte('data_treinamento', filtroDataInicio)
+        if (filtroDataFim) query = query.lte('data_treinamento', filtroDataFim)
+        const { data: d, error } = await query.order('codigo', { ascending: false })
+        if (error) throw error
+        data = (d as unknown as Treinamento[]) ?? []
+      } else {
+        const userEmail = user?.email
+        if (!userEmail) {
+          toast.error('Não foi possível exportar.')
+          return
+        }
+        const { data: colData, error: colError } = await supabase
+          .from('colaboradores')
+          .select('id')
+          .eq('tenant_id', activeTenantId)
+          .eq('email', userEmail)
+          .maybeSingle()
+        if (colError || !colData) {
+          toast.error('Não foi possível exportar.')
+          return
+        }
+        const colaboradorId = (colData as { id: string }).id
+        const { data: tcData, error: tcError } = await supabase
+          .from('treinamento_colaboradores')
+          .select('treinamento_id')
+          .eq('colaborador_id', colaboradorId)
+        if (tcError) throw tcError
+        let ids = (tcData ?? []).map((r: { treinamento_id: string }) => r.treinamento_id)
+        if (participanteIds !== null) {
+          ids = ids.filter((id) => participanteIds.includes(id))
+        }
+        if (ids.length === 0) {
+          data = []
+        } else {
+          let query = supabase
+            .from('treinamentos')
+            .select(selectColsExport)
+            .in('id', ids)
+          if (filtroTipo !== 'todos') query = query.eq('tipo', filtroTipo)
+          if (filtroEmpresa !== 'todas') query = query.eq('empresa_parceira_id', filtroEmpresa)
+          if (filtroDataInicio) query = query.gte('data_treinamento', filtroDataInicio)
+          if (filtroDataFim) query = query.lte('data_treinamento', filtroDataFim)
+          const { data: d, error } = await query.order('codigo', { ascending: false })
+          if (error) throw error
+          data = (d as unknown as Treinamento[]) ?? []
+        }
+      }
+
+      const headerStyle = {
+        fill: { fgColor: { rgb: '00C9A7' } },
+        font: { bold: true, color: { rgb: 'FFFFFF' } },
+      }
+
+      const rows = data.map((t) => [
+        t.codigo,
+        tipoLabel[t.tipo] ?? t.tipo,
+        t.nome,
+        t.empresas_parceiras?.nome ?? '—',
+        t.carga_horaria,
+        formatDate(t.data_treinamento),
+        t.indice_satisfacao != null ? `${t.indice_satisfacao}%` : '—',
+        t.indice_aprovacao != null ? `${t.indice_aprovacao}%` : '—',
+      ])
+
+      const aoa = [
+        [
+          { v: 'Código', t: 's', s: headerStyle },
+          { v: 'Tipo', t: 's', s: headerStyle },
+          { v: 'Nome do Treinamento', t: 's', s: headerStyle },
+          { v: 'Empresa Parceira', t: 's', s: headerStyle },
+          { v: 'Carga Horária (h)', t: 's', s: headerStyle },
+          { v: 'Data', t: 's', s: headerStyle },
+          { v: 'Satisfação (%)', t: 's', s: headerStyle },
+          { v: 'Aprovação (%)', t: 's', s: headerStyle },
+        ],
+        ...rows.map((r) => r.map((v) => ({ v, t: 's' as const }))),
+      ]
+
+      const codigoPorId = Object.fromEntries(data.map((t) => [t.id, t.codigo]))
+      const idsParceiro = data.filter((t) => t.tipo === 'parceiro').map((t) => t.id)
+      const idsColaborador = data.filter((t) => t.tipo === 'colaborador').map((t) => t.id)
+
+      const participantesRows: { codigo: string; nome: string; email: string }[] = []
+
+      if (idsParceiro.length > 0) {
+        let offset = 0
+        const pageSize = 1000
+        let hasMore = true
+        while (hasMore) {
+          const { data: parceirosData } = await supabase
+            .from('treinamento_parceiros')
+            .select('treinamento_id, nome, email')
+            .in('treinamento_id', idsParceiro)
+            .eq('tenant_id', activeTenantId)
+            .range(offset, offset + pageSize - 1)
+          const parceiros = (parceirosData ?? []) as { treinamento_id: string; nome: string; email: string }[]
+          parceiros.forEach((p) => {
+            participantesRows.push({
+              codigo: codigoPorId[p.treinamento_id] ?? '—',
+              nome: p.nome ?? '—',
+              email: p.email ?? '—',
+            })
+          })
+          hasMore = parceiros.length === pageSize
+          offset += pageSize
+        }
+      }
+
+      if (idsColaborador.length > 0) {
+        let offset = 0
+        const pageSize = 1000
+        let hasMore = true
+        const colaboradorMap = new Map<string, { nome: string; email: string }>()
+        while (hasMore) {
+          const { data: tcData } = await supabase
+            .from('treinamento_colaboradores')
+            .select('treinamento_id, colaborador_id')
+            .in('treinamento_id', idsColaborador)
+            .eq('tenant_id', activeTenantId)
+            .range(offset, offset + pageSize - 1)
+          const tcRows = (tcData ?? []) as { treinamento_id: string; colaborador_id: string }[]
+          const colaboradorIds = [...new Set(tcRows.map((r) => r.colaborador_id))]
+          if (colaboradorIds.length > 0) {
+            const idsToFetch = colaboradorIds.filter((id) => !colaboradorMap.has(id))
+            if (idsToFetch.length > 0) {
+              const { data: colData } = await supabase
+                .from('colaboradores')
+                .select('id, nome, email')
+                .in('id', idsToFetch)
+                .eq('tenant_id', activeTenantId)
+              const cols = (colData ?? []) as { id: string; nome: string; email: string }[]
+              cols.forEach((c) => colaboradorMap.set(c.id, { nome: c.nome ?? '—', email: c.email ?? '—' }))
+            }
+            tcRows.forEach((row) => {
+              const col = colaboradorMap.get(row.colaborador_id) ?? { nome: '—', email: '—' }
+              participantesRows.push({
+                codigo: codigoPorId[row.treinamento_id] ?? '—',
+                nome: col.nome,
+                email: col.email,
+              })
+            })
+          }
+          hasMore = tcRows.length === pageSize
+          offset += pageSize
+        }
+      }
+
+      participantesRows.sort((a, b) =>
+        a.codigo.localeCompare(b.codigo) || a.nome.localeCompare(b.nome)
+      )
+
+      const aoaParticipantes = [
+        [
+          { v: 'Código', t: 's', s: headerStyle },
+          { v: 'Nome', t: 's', s: headerStyle },
+          { v: 'E-mail', t: 's', s: headerStyle },
+        ],
+        ...participantesRows.map((r) => [
+          { v: r.codigo, t: 's' as const },
+          { v: r.nome, t: 's' as const },
+          { v: r.email, t: 's' as const },
+        ]),
+      ]
+
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet(aoa)
+      ws['!cols'] = [
+        { wch: 14 },
+        { wch: 12 },
+        { wch: 35 },
+        { wch: 25 },
+        { wch: 16 },
+        { wch: 12 },
+        { wch: 14 },
+        { wch: 14 },
+      ]
+      XLSX.utils.book_append_sheet(wb, ws, 'Histórico de Treinamentos')
+
+      const wsParticipantes = XLSX.utils.aoa_to_sheet(aoaParticipantes)
+      wsParticipantes['!cols'] = [{ wch: 14 }, { wch: 35 }, { wch: 35 }]
+      XLSX.utils.book_append_sheet(wb, wsParticipantes, 'Participantes')
+      const filename = `historico-treinamentos-${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.xlsx`
+      XLSX.writeFile(wb, filename)
+      toast.success('Exportação concluída.')
+    } catch (err) {
+      console.error('Erro ao exportar:', err)
+      toast.error('Não foi possível exportar o Excel.')
+    } finally {
+      setExportando(false)
+    }
+  }
+
   const empresaNome = (t: Treinamento) =>
     t.empresas_parceiras?.nome ?? '—'
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="font-serif text-2xl font-bold text-foreground">
-          Histórico de Treinamentos
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {loading ? '...' : filtered.length}{' '}
-          treinamento{filtered.length !== 1 ? 's' : ''} encontrado
-          {filtered.length !== 1 ? 's' : ''}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-serif text-2xl font-bold text-foreground">
+            Histórico de Treinamentos
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            {loading ? '...' : totalRegistros}{' '}
+            treinamento{totalRegistros !== 1 ? 's' : ''} encontrado
+            {totalRegistros !== 1 ? 's' : ''}
+          </p>
+        </div>
+        {canExportExcel && (
+          <Button
+            variant="outline"
+            onClick={exportarExcel}
+            disabled={exportando || loading}
+            className="gap-2"
+          >
+            <Download className="w-4 h-4" />
+            {exportando ? 'Exportando...' : 'Exportar Excel'}
+          </Button>
+        )}
       </div>
 
       {/* Filtros */}
@@ -1085,7 +1345,7 @@ export default function HistoricoPage() {
               <Skeleton key={i} className="h-12 w-full" />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : treinamentos.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
             <p className="text-muted-foreground text-sm">
               Nenhum treinamento encontrado.
@@ -1110,7 +1370,7 @@ export default function HistoricoPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((t) => (
+              {treinamentos.map((t) => (
                 <TableRow key={t.id}>
                   <TableCell>
                     <span className="font-mono text-xs text-muted-foreground">
@@ -1215,6 +1475,53 @@ export default function HistoricoPage() {
           </Table>
         )}
       </div>
+
+      {/* Paginação */}
+      {!loading && totalRegistros > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-sm text-muted-foreground">
+            Mostrando {inicio}–{fim} de {totalRegistros} treinamentos
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
+              disabled={paginaAtual <= 1}
+              className="gap-1"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Anterior
+            </Button>
+            <div className="flex items-center gap-1">
+              {paginasParaExibir.map((num) => (
+                <Button
+                  key={num}
+                  variant={num === paginaAtual ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPaginaAtual(num)}
+                  className={cn(
+                    num === paginaAtual &&
+                      'bg-[#00C9A7] hover:bg-[#00C9A7]/90 text-white'
+                  )}
+                >
+                  {num}
+                </Button>
+              ))}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPaginaAtual((p) => Math.min(totalPaginas, p + 1))}
+              disabled={paginaAtual >= totalPaginas}
+              className="gap-1"
+            >
+              Próximo
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Sheet Detalhes */}
       <Sheet open={detailsOpen} onOpenChange={(open) => !open && handleCloseDetails()}>
