@@ -21,7 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import { parseExcelFile, downloadTemplate, getExcelValue } from '@/lib/excel-utils'
+import { parseExcelFileWithTwoSheets, downloadImportTreinamentosTemplate, getExcelValue } from '@/lib/excel-utils'
 import { toast } from 'sonner'
 
 type ImportStep = 'upload' | 'preview' | 'errors'
@@ -35,6 +35,15 @@ interface EmpresaParceira {
 interface ColaboradorItem {
   id: string
   nome: string
+  email?: string | null
+}
+
+interface Participante {
+  nome: string
+  email: string
+  linha: number
+  status?: 'valido' | 'erro'
+  motivo?: string
 }
 
 interface TreinamentoImportDialogProps {
@@ -54,16 +63,22 @@ const HEADER_ALIASES_PARCEIRO: Record<string, string[]> = {
   objetivo: ['Objetivo', 'objetivo'],
   carga_horaria: ['Carga Horária (horas)', 'carga_horaria'],
   empresa_parceira: ['Empresa Parceira', 'empresa_parceira'],
-  quantidade_pessoas: ['Quantidade de Pessoas', 'quantidade_pessoas'],
   data_treinamento: ['Data do Treinamento (DD/MM/AAAA)', 'data_treinamento'],
   indice_satisfacao: ['Índice de Satisfação (%)', 'indice_satisfacao'],
   indice_aprovacao: ['Índice de Aprovação (%)', 'indice_aprovacao'],
 }
+
+const PARTICIPANTES_ALIASES: Record<string, string[]> = {
+  treinamento_numero: ['Treinamento #', 'treinamento_numero', '#'],
+  nome: ['Nome', 'nome'],
+  email: ['E-mail', 'E-mail', 'email'],
+}
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const HEADER_ALIASES_COLABORADOR: Record<string, string[]> = {
   ...HEADER_ALIASES_PARCEIRO,
   colaboradores: ['Colaboradores (separados por ;)', 'colaboradores'],
 }
-delete (HEADER_ALIASES_COLABORADOR as Record<string, unknown>).quantidade_pessoas
 
 function parseDateDDMMYYYY(str: string): Date | null {
   const match = String(str || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
@@ -110,6 +125,10 @@ export function TreinamentoImportDialog({
     () => new Map(colaboradores.map((c) => [c.nome.toLowerCase(), c])),
     [colaboradores]
   )
+  const colaboradoresEmailsSet = React.useMemo(
+    () => new Set(colaboradores.map((c) => (c.email ?? '').toLowerCase().trim()).filter(Boolean)),
+    [colaboradores]
+  )
   const existentesSet = React.useMemo(
     () =>
       new Set(
@@ -139,35 +158,43 @@ export function TreinamentoImportDialog({
   const handleDownloadTemplate = () => {
     if (importType === 'parceiro') {
       const headers = [
+        '#',
         'Nome do Treinamento',
         'Conteúdo Programático',
         'Objetivo',
         'Carga Horária (horas)',
         'Empresa Parceira',
-        'Quantidade de Pessoas',
         'Data do Treinamento (DD/MM/AAAA)',
         'Índice de Satisfação (%)',
         'Índice de Aprovação (%)',
       ]
-      downloadTemplate(
+      const sample = {
+        '#': '1',
+        'Nome do Treinamento': 'Gestão de Projetos',
+        'Conteúdo Programático': 'Módulos 1 a 5',
+        'Objetivo': 'Capacitar equipe',
+        'Carga Horária (horas)': '8',
+        'Empresa Parceira': 'Empresa ABC',
+        'Data do Treinamento (DD/MM/AAAA)': '15/03/2025',
+        'Índice de Satisfação (%)': '90',
+        'Índice de Aprovação (%)': '95',
+      }
+      downloadImportTreinamentosTemplate(
+        'Treinamentos',
         headers,
-        {
-          'Nome do Treinamento': 'Gestão de Projetos',
-          'Conteúdo Programático': 'Módulos 1 a 5',
-          'Objetivo': 'Capacitar equipe',
-          'Carga Horária (horas)': '8',
-          'Empresa Parceira': 'Empresa ABC',
-          'Quantidade de Pessoas': '25',
-          'Data do Treinamento (DD/MM/AAAA)': '15/03/2025',
-          'Índice de Satisfação (%)': '90',
-          'Índice de Aprovação (%)': '95',
-        },
+        sample,
+        [8, 25, 40, 40, 25, 25, 28, 22, 22],
+        [
+          [1, 'João da Silva', 'joao@empresa.com'],
+          [1, 'Maria Santos', 'maria@empresa.com'],
+          [2, 'Carlos Lima', 'carlos@empresa.com'],
+        ],
         'template_treinamentos_parceiro.xlsx',
-        'TrainHub — Template de Importação: Treinamentos Parceiro',
-        [25, 40, 40, 25, 25, 25, 28, 22, 22]
+        'TrainHub — Template de Importação: Treinamentos Parceiro'
       )
     } else {
       const headers = [
+        '#',
         'Nome do Treinamento',
         'Conteúdo Programático',
         'Objetivo',
@@ -178,30 +205,108 @@ export function TreinamentoImportDialog({
         'Índice de Aprovação (%)',
         'Colaboradores (separados por ;)',
       ]
-      downloadTemplate(
+      const sample = {
+        '#': '1',
+        'Nome do Treinamento': 'Treinamento Interno',
+        'Conteúdo Programático': 'Conteúdo do treinamento',
+        'Objetivo': 'Objetivo',
+        'Carga Horária (horas)': '4',
+        'Empresa Parceira': 'Empresa XYZ',
+        'Data do Treinamento (DD/MM/AAAA)': '20/03/2025',
+        'Índice de Satisfação (%)': '85',
+        'Índice de Aprovação (%)': '90',
+        'Colaboradores (separados por ;)': 'João Silva;Maria Santos',
+      }
+      downloadImportTreinamentosTemplate(
+        'Treinamentos',
         headers,
-        {
-          'Nome do Treinamento': 'Treinamento Interno',
-          'Conteúdo Programático': 'Conteúdo do treinamento',
-          'Objetivo': 'Objetivo',
-          'Carga Horária (horas)': '4',
-          'Empresa Parceira': 'Empresa XYZ',
-          'Data do Treinamento (DD/MM/AAAA)': '20/03/2025',
-          'Índice de Satisfação (%)': '85',
-          'Índice de Aprovação (%)': '90',
-          'Colaboradores (separados por ;)': 'João Silva;Maria Santos',
-        },
+        sample,
+        [8, 25, 40, 40, 25, 25, 28, 22, 22, 40],
+        [
+          [1, 'João da Silva', 'joao@neocredito.com.br'],
+          [2, 'Maria Santos', 'maria@neocredito.com.br'],
+        ],
         'template_treinamentos_colaborador.xlsx',
-        'TrainHub — Template de Importação: Treinamentos Colaborador',
-        [25, 40, 40, 25, 25, 28, 22, 22, 40]
+        'TrainHub — Template de Importação: Treinamentos Colaborador'
       )
     }
   }
 
   const headerAliases = importType === 'parceiro' ? HEADER_ALIASES_PARCEIRO : HEADER_ALIASES_COLABORADOR
 
-  const validateAndProcess = (dataRows: Record<string, unknown>[]) => {
+  const validateAndProcess = (
+    dataRows: Record<string, unknown>[],
+    participantesRows: Record<string, unknown>[],
+    numTreinamentos: number
+  ) => {
     const errs: string[] = []
+    const participantesPorIndice = new Map<number, Participante[]>()
+    const participantesValidadosPorIndice = new Map<number, Participante[]>()
+
+    const parseAndValidateParticipantes = (n: number) => {
+      const headerKeys = participantesRows[0] ? Object.keys(participantesRows[0]).map((k) => k.toLowerCase()) : []
+      const hasNumero = headerKeys.some((k) => k.includes('treinamento') || k === '#')
+      const hasNome = headerKeys.some((k) => k.includes('nome'))
+      const hasEmail = headerKeys.some((k) => k.includes('e-mail') || k.includes('email'))
+      if (!hasNumero || !hasNome || !hasEmail) return
+      if (participantesRows.length === 0) return
+
+      const emailsPorIndice = new Map<number, Set<string>>()
+      for (let i = 0; i < participantesRows.length; i++) {
+        const row = participantesRows[i]!
+        const linha = i + 2
+        const numVal = getExcelValue(row, 'treinamento_numero', PARTICIPANTES_ALIASES)
+        const treinamentoNum = typeof numVal === 'number' ? numVal : parseInt(String(numVal ?? ''), 10)
+        const nome = String(getExcelValue(row, 'nome', PARTICIPANTES_ALIASES) ?? '').trim()
+        const email = String(getExcelValue(row, 'email', PARTICIPANTES_ALIASES) ?? '').trim()
+
+        if (nome === '' && email === '') continue
+
+        if (isNaN(treinamentoNum) || treinamentoNum < 1) {
+          errs.push(`Participantes linha ${linha}: "Treinamento #" deve ser número válido (>= 1)`)
+          continue
+        }
+        if (treinamentoNum > n) {
+          errs.push(`Participantes linha ${linha}: Treinamento #${treinamentoNum} não existe (máx. ${n})`)
+          continue
+        }
+        if (!nome) {
+          errs.push(`Participantes linha ${linha}: Nome obrigatório`)
+          continue
+        }
+        if (!email) {
+          errs.push(`Participantes linha ${linha}: E-mail obrigatório`)
+          continue
+        }
+        if (!EMAIL_REGEX.test(email)) {
+          errs.push(`Participantes linha ${linha}: E-mail inválido`)
+          continue
+        }
+        const emailLower = email.toLowerCase()
+        const set = emailsPorIndice.get(treinamentoNum) ?? new Set()
+        if (set.has(emailLower)) {
+          errs.push(`Participantes linha ${linha}: E-mail duplicado no treinamento #${treinamentoNum}`)
+          continue
+        }
+        set.add(emailLower)
+        emailsPorIndice.set(treinamentoNum, set)
+
+        if (importType === 'colaborador') {
+          if (!colaboradoresEmailsSet.has(emailLower)) {
+            errs.push(`Participantes linha ${linha}: Colaborador com e-mail "${email}" não cadastrado no sistema`)
+            continue
+          }
+        }
+
+        const p: Participante = { nome, email, linha }
+        const list = participantesPorIndice.get(treinamentoNum) ?? []
+        list.push(p)
+        participantesPorIndice.set(treinamentoNum, list)
+        const validList = participantesValidadosPorIndice.get(treinamentoNum) ?? []
+        validList.push(p)
+        participantesValidadosPorIndice.set(treinamentoNum, validList)
+      }
+    }
 
     if (importType === 'parceiro') {
       const data: Record<string, unknown>[] = []
@@ -213,7 +318,6 @@ export function TreinamentoImportDialog({
         const objetivo = String(getExcelValue(row, 'objetivo', headerAliases) ?? '').trim()
         const cargaHoraria = Number(getExcelValue(row, 'carga_horaria', headerAliases))
         const empresaNome = String(getExcelValue(row, 'empresa_parceira', headerAliases) ?? '').trim()
-        const quantidadePessoas = Number(getExcelValue(row, 'quantidade_pessoas', headerAliases))
         const dataStr = String(getExcelValue(row, 'data_treinamento', headerAliases) ?? '').trim()
         const indiceSatisfacao = Number(getExcelValue(row, 'indice_satisfacao', headerAliases))
         const indiceAprovacao = Number(getExcelValue(row, 'indice_aprovacao', headerAliases))
@@ -229,10 +333,6 @@ export function TreinamentoImportDialog({
         }
         if (isNaN(cargaHoraria) || cargaHoraria <= 0) {
           errs.push(`Linha ${linha}: Campo 'carga_horaria' deve ser maior que 0`)
-          continue
-        }
-        if (isNaN(quantidadePessoas) || quantidadePessoas < 1) {
-          errs.push(`Linha ${linha}: Campo 'quantidade_pessoas' deve ser >= 1`)
           continue
         }
         const dataObj = parseDateDDMMYYYY(dataStr)
@@ -265,18 +365,24 @@ export function TreinamentoImportDialog({
         existentesSet.add(dupKey)
         data.push({
           tipo: 'parceiro',
+          _indice: i + 1,
           nome,
           conteudo,
           objetivo,
           carga_horaria: cargaHoraria,
           empresa_parceira_id: empresa.id,
-          quantidade_pessoas: quantidadePessoas,
+          quantidade_pessoas: 0,
           data_treinamento: dataFormatted,
           indice_satisfacao: indiceSatisfacao,
           indice_aprovacao: indiceAprovacao,
         })
       }
+      parseAndValidateParticipantes(dataRows.length)
       if (errs.length > 0) return { valid: false, errors: errs }
+      data.forEach((row) => {
+        const idx = row._indice as number
+        row._participantes = participantesValidadosPorIndice.get(idx) ?? []
+      })
       return { valid: true, errors: [], data }
     } else {
       const data: Record<string, unknown>[] = []
@@ -363,6 +469,7 @@ export function TreinamentoImportDialog({
         existentesSet.add(dupKey)
         data.push({
           tipo: 'colaborador',
+          _indice: i + 1,
           nome,
           conteudo,
           objetivo,
@@ -375,7 +482,12 @@ export function TreinamentoImportDialog({
           colaboradores: colaboradoresStr,
         })
       }
+      parseAndValidateParticipantes(dataRows.length)
       if (errs.length > 0) return { valid: false, errors: errs }
+      data.forEach((row) => {
+        const idx = row._indice as number
+        row._participantes = participantesValidadosPorIndice.get(idx) ?? []
+      })
       return { valid: true, errors: [], data }
     }
   }
@@ -388,14 +500,14 @@ export function TreinamentoImportDialog({
     }
     setErrors([])
     try {
-      const data = await parseExcelFile(f)
-      if (data.length === 0) {
-        setErrors(['O arquivo está vazio ou não possui dados válidos.'])
+      const { treinamentos, participantes } = await parseExcelFileWithTwoSheets(f, { skipTitleRow: true })
+      if (treinamentos.length === 0) {
+        setErrors(['O arquivo está vazio ou não possui dados válidos na aba Treinamentos.'])
         setStep('errors')
         return
       }
-      setRows(data)
-      const result = validateAndProcess(data)
+      setRows(treinamentos)
+      const result = validateAndProcess(treinamentos, participantes, treinamentos.length)
       if (result.valid && result.data) {
         setValidData(result.data)
         setStep('preview')
@@ -453,21 +565,31 @@ export function TreinamentoImportDialog({
       ? [
           { key: 'nome', label: 'Nome' },
           { key: 'empresa_parceira_id', label: 'Empresa' },
-          { key: 'quantidade_pessoas', label: 'Qtd Pessoas' },
           { key: 'data_treinamento', label: 'Data' },
+          { key: '_participantes', label: 'Participantes' },
         ]
       : [
           { key: 'nome', label: 'Nome' },
           { key: 'empresa_parceira_id', label: 'Empresa' },
           { key: 'colaboradores', label: 'Colaboradores' },
           { key: 'data_treinamento', label: 'Data' },
+          { key: '_participantes', label: 'Participantes' },
         ]
 
-  const getCellValue = (row: Record<string, unknown>, key: string): string => {
+  const getCellValue = (row: Record<string, unknown>, key: string): React.ReactNode => {
     if (key === 'empresa_parceira_id') {
       const id = row[key]
       const emp = empresas.find((e) => e.id === id)
       return emp?.nome ?? String(id ?? '—')
+    }
+    if (key === '_participantes') {
+      const parts = (row[key] as Participante[] | undefined) ?? []
+      const count = parts.length
+      return (
+        <span className={count > 0 ? 'text-emerald-600' : 'text-muted-foreground'}>
+          {count} participante{count !== 1 ? 's' : ''}
+        </span>
+      )
     }
     const val = row[key]
     if (val == null) return '—'
@@ -591,7 +713,7 @@ function ImportContent({
   errors: string[]
   validData: Record<string, unknown>[] | null
   previewColumns: { key: string; label: string }[]
-  getCellValue: (row: Record<string, unknown>, key: string) => string
+  getCellValue: (row: Record<string, unknown>, key: string) => React.ReactNode
   onBack: () => void
 }) {
   return (

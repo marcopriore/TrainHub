@@ -176,6 +176,106 @@ export function downloadTemplate(
   XLSX.writeFile(wb, filename)
 }
 
+export interface ParseExcelTwoSheetsResult {
+  treinamentos: Record<string, unknown>[]
+  participantes: Record<string, unknown>[]
+}
+
+/**
+ * Lê um arquivo Excel e retorna dados da primeira e segunda planilha.
+ * A segunda planilha é opcional — se não existir, retorna array vazio.
+ */
+export function parseExcelFileWithTwoSheets(
+  file: File,
+  options?: ParseExcelOptions
+): Promise<ParseExcelTwoSheetsResult> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result
+        if (!data) {
+          reject(new Error('Falha ao ler o arquivo.'))
+          return
+        }
+        const workbook = XLSX.read(data, { type: 'binary' })
+        const sheet0 = workbook.Sheets[workbook.SheetNames[0]!]
+        const sheet1 = workbook.SheetNames[1]
+          ? workbook.Sheets[workbook.SheetNames[1]!]
+          : null
+
+        const sheetOptions: XLSX.JSON2SheetOpts & { range?: string } = {
+          raw: false,
+          defval: '',
+        }
+        if (options?.skipTitleRow && sheet0) {
+          const ref = (sheet0['!ref'] as string) || 'A1:Z100'
+          const match = ref.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
+          if (match) {
+            const startRow = parseInt(match[2], 10) + 1
+            sheetOptions.range = `${match[1]}${startRow}:${match[3]}${match[4]}`
+          }
+        }
+
+        const treinamentos = sheet0
+          ? XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet0, sheetOptions)
+          : []
+
+        let participantes: Record<string, unknown>[] = []
+        if (sheet1) {
+          participantes = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet1, {
+            raw: false,
+            defval: '',
+          })
+        }
+
+        resolve({ treinamentos, participantes })
+      } catch (err) {
+        reject(err)
+      }
+    }
+    reader.onerror = () => reject(new Error('Falha ao ler o arquivo.'))
+    reader.readAsBinaryString(file)
+  })
+}
+
+/**
+ * Gera template de importação com duas abas: Treinamentos e Participantes
+ */
+export function downloadImportTreinamentosTemplate(
+  sheet1Name: string,
+  treinamentosHeaders: string[],
+  treinamentosSample: Record<string, string>,
+  treinamentosColWidths: number[],
+  participantesSampleRows: (string | number)[][],
+  filename: string,
+  title: string
+) {
+  const wb = XLSX.utils.book_new()
+
+  const aoa1: (string | number | XLSX.CellObject)[][] = []
+  aoa1.push([{ v: title, t: 's', s: titleStyle }])
+  aoa1.push(treinamentosHeaders.map((h) => ({ v: h, t: 's', s: headerStyle })))
+  aoa1.push(treinamentosHeaders.map((h) => ({ v: treinamentosSample[h] ?? '', t: 's', s: dataRowStyle(false) })))
+
+  const ws1 = XLSX.utils.aoa_to_sheet(aoa1)
+  ws1['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: treinamentosHeaders.length - 1 } }]
+  ws1['!cols'] = treinamentosColWidths.map((w) => ({ wch: w }))
+  XLSX.utils.book_append_sheet(wb, ws1, sheet1Name)
+
+  const partHeaders = ['Treinamento #', 'Nome', 'E-mail']
+  const aoa2: (string | number | XLSX.CellObject)[][] = []
+  aoa2.push(partHeaders.map((h) => ({ v: h, t: 's', s: headerStyle })))
+  participantesSampleRows.forEach((row, idx) => {
+    aoa2.push(row.map((v) => ({ v, t: typeof v === 'number' ? 'n' : 's', s: dataRowStyle(idx % 2 === 1) })))
+  })
+  const ws2 = XLSX.utils.aoa_to_sheet(aoa2)
+  ws2['!cols'] = [{ wch: 15 }, { wch: 30 }, { wch: 30 }]
+  XLSX.utils.book_append_sheet(wb, ws2, 'Participantes')
+
+  XLSX.writeFile(wb, filename)
+}
+
 /**
  * Exporta relatório para Excel com múltiplas abas
  * headerLabels: mapeia chave técnica -> label legível (ex: mes -> Mês)

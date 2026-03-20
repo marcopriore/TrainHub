@@ -334,13 +334,13 @@ export default function NovoTreinamentoPage() {
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
         empresas={empresas}
-        colaboradores={colaboradores.map((c) => ({ id: c.id, nome: c.nome }))}
+        colaboradores={colaboradores.map((c) => ({ id: c.id, nome: c.nome, email: c.email }))}
         treinamentosExistentes={treinamentosExistentes}
         onImportParceiro={async (data) => {
           if (!activeTenantId) throw new Error('Tenant não identificado')
           const supabaseClient = createClient()
           for (const row of data) {
-            const { error } = await supabaseClient
+            const { data: inserted, error } = await supabaseClient
               .from('treinamentos')
               .insert({
                 tipo: 'parceiro',
@@ -349,13 +349,31 @@ export default function NovoTreinamentoPage() {
                 objetivo: row.objetivo ?? '',
                 carga_horaria: row.carga_horaria,
                 empresa_parceira_id: row.empresa_parceira_id,
-                quantidade_pessoas: row.quantidade_pessoas,
+                quantidade_pessoas: 0,
                 data_treinamento: row.data_treinamento,
                 indice_satisfacao: row.indice_satisfacao,
                 indice_aprovacao: row.indice_aprovacao,
                 tenant_id: activeTenantId,
               })
+              .select('id')
+              .single()
             if (error) throw error
+            const treinamentoId = (inserted as { id: string }).id
+            const participantes = (row._participantes as { nome: string; email: string }[]) ?? []
+            if (participantes.length > 0) {
+              await supabaseClient.from('treinamento_parceiros').insert(
+                participantes.map((p) => ({
+                  treinamento_id: treinamentoId,
+                  tenant_id: activeTenantId,
+                  nome: p.nome,
+                  email: p.email,
+                }))
+              )
+              await supabaseClient
+                .from('treinamentos')
+                .update({ quantidade_pessoas: participantes.length })
+                .eq('id', treinamentoId)
+            }
           }
         }}
         onImportColaborador={async (data) => {
@@ -380,9 +398,24 @@ export default function NovoTreinamentoPage() {
               .single()
             if (err1) throw err1
             const treinamentoId = (inserted as { id: string }).id
-            const colabIds = row.colaborador_ids as string[]
-            if (colabIds?.length) {
-              const rows = colabIds.map((colaborador_id: string) => ({
+            const colabIds = (row.colaborador_ids as string[]) ?? []
+            const participantes = (row._participantes as { nome: string; email: string }[]) ?? []
+            const colabIdsFromParticipantes: string[] = []
+            if (participantes.length > 0) {
+              const { data: colabs } = await supabaseClient
+                .from('colaboradores')
+                .select('id, email')
+                .eq('tenant_id', activeTenantId)
+                .in('email', participantes.map((p) => p.email))
+              const emailToId = new Map((colabs ?? []).map((c) => [(c.email ?? '').toLowerCase(), c.id]))
+              for (const p of participantes) {
+                const id = emailToId.get(p.email.toLowerCase())
+                if (id) colabIdsFromParticipantes.push(id)
+              }
+            }
+            const allColabIds = [...new Set([...colabIds, ...colabIdsFromParticipantes])]
+            if (allColabIds.length > 0) {
+              const rows = allColabIds.map((colaborador_id: string) => ({
                 treinamento_id: treinamentoId,
                 colaborador_id,
                 tenant_id: activeTenantId,
@@ -391,6 +424,10 @@ export default function NovoTreinamentoPage() {
                 .from('treinamento_colaboradores')
                 .insert(rows)
               if (err2) throw err2
+              await supabaseClient
+                .from('treinamentos')
+                .update({ quantidade_pessoas: allColabIds.length })
+                .eq('id', treinamentoId)
             }
           }
         }}
