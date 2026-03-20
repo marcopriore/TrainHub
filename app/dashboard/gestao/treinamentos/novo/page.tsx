@@ -398,9 +398,8 @@ export default function NovoTreinamentoPage() {
               .single()
             if (err1) throw err1
             const treinamentoId = (inserted as { id: string }).id
-            const colabIds = (row.colaborador_ids as string[]) ?? []
             const participantes = (row._participantes as { nome: string; email: string }[]) ?? []
-            const colabIdsFromParticipantes: string[] = []
+            let colabIds: string[] = []
             if (participantes.length > 0) {
               const { data: colabs } = await supabaseClient
                 .from('colaboradores')
@@ -410,12 +409,11 @@ export default function NovoTreinamentoPage() {
               const emailToId = new Map((colabs ?? []).map((c) => [(c.email ?? '').toLowerCase(), c.id]))
               for (const p of participantes) {
                 const id = emailToId.get(p.email.toLowerCase())
-                if (id) colabIdsFromParticipantes.push(id)
+                if (id) colabIds.push(id)
               }
             }
-            const allColabIds = [...new Set([...colabIds, ...colabIdsFromParticipantes])]
-            if (allColabIds.length > 0) {
-              const rows = allColabIds.map((colaborador_id: string) => ({
+            if (colabIds.length > 0) {
+              const rows = colabIds.map((colaborador_id: string) => ({
                 treinamento_id: treinamentoId,
                 colaborador_id,
                 tenant_id: activeTenantId,
@@ -426,7 +424,7 @@ export default function NovoTreinamentoPage() {
               if (err2) throw err2
               await supabaseClient
                 .from('treinamentos')
-                .update({ quantidade_pessoas: allColabIds.length })
+                .update({ quantidade_pessoas: colabIds.length })
                 .eq('id', treinamentoId)
             }
           }

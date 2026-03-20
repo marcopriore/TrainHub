@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Eye,
@@ -13,6 +13,7 @@ import {
   Users,
   Building2,
   PlusCircle,
+  Search,
 } from 'lucide-react'
 import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form'
 import { z } from 'zod'
@@ -57,6 +58,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 interface Treinamento {
@@ -543,7 +557,28 @@ export default function HistoricoPage() {
   const [colaboradoresList, setColaboradoresList] = useState<ColaboradorWithSetorEdit[]>([])
   const [colaboradoresVinculados, setColaboradoresVinculados] = useState<string[]>([])
 
+  const [participantesDialogOpen, setParticipantesDialogOpen] = useState(false)
+  const [treinamentoSelecionado, setTreinamentoSelecionado] = useState<Treinamento | null>(null)
+  const [participantes, setParticipantes] = useState<{ nome: string; email: string }[]>([])
+  const [loadingParticipantes, setLoadingParticipantes] = useState(false)
+  const [buscaParticipante, setBuscaParticipante] = useState('')
+
+  const [filtroParticipante, setFiltroParticipante] = useState('')
+  const [debouncedFiltroParticipante, setDebouncedFiltroParticipante] = useState('')
+  const [idsPorParticipante, setIdsPorParticipante] = useState<string[] | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const supabase = createClient()
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setDebouncedFiltroParticipante(filtroParticipante)
+    }, 300)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [filtroParticipante])
 
   useEffect(() => {
     if (user && !canView) router.replace('/dashboard/gestao')
@@ -557,8 +592,10 @@ export default function HistoricoPage() {
     }
     if (!silent) setLoading(true)
     try {
+      const participanteIds = idsPorParticipante
+
       if (user?.isMaster() || user?.isAdmin?.()) {
-        const { data, error } = await supabase
+        let query = supabase
           .from('treinamentos')
           .select(
             `
@@ -580,7 +617,10 @@ export default function HistoricoPage() {
             `
           )
           .eq('tenant_id', activeTenantId)
-          .order('codigo', { ascending: false })
+        if (participanteIds !== null) {
+          query = query.in('id', participanteIds.length > 0 ? participanteIds : ['__empty__'])
+        }
+        const { data, error } = await query.order('codigo', { ascending: false })
         if (error) throw error
         setTreinamentos((data as Treinamento[]) ?? [])
         return
@@ -616,7 +656,10 @@ export default function HistoricoPage() {
         .select('treinamento_id')
         .eq('colaborador_id', colaboradorId)
       if (tcError) throw tcError
-      const ids = (tcData ?? []).map((r: { treinamento_id: string }) => r.treinamento_id)
+      let ids = (tcData ?? []).map((r: { treinamento_id: string }) => r.treinamento_id)
+      if (participanteIds !== null) {
+        ids = ids.filter((id) => participanteIds.includes(id))
+      }
       if (ids.length === 0) {
         setTreinamentos([])
         setLoading(false)
@@ -675,6 +718,55 @@ export default function HistoricoPage() {
     }
   }
 
+  const buscarTreinamentosPorParticipante = async (texto: string): Promise<string[] | null> => {
+    if (!texto || texto.length < 2 || !activeTenantId) return null
+    try {
+      const { data: parceiros } = await supabase
+        .from('treinamento_parceiros')
+        .select('treinamento_id')
+        .eq('tenant_id', activeTenantId)
+        .or(`nome.ilike.%${texto}%,email.ilike.%${texto}%`)
+
+      const { data: colaboradoresMatch } = await supabase
+        .from('colaboradores')
+        .select('id')
+        .eq('tenant_id', activeTenantId)
+        .or(`nome.ilike.%${texto}%,email.ilike.%${texto}%`)
+
+      const colaboradorIds = colaboradoresMatch?.map((c) => c.id) ?? []
+      let treinamentoIdsColaborador: string[] = []
+      if (colaboradorIds.length > 0) {
+        const { data: tc } = await supabase
+          .from('treinamento_colaboradores')
+          .select('treinamento_id')
+          .eq('tenant_id', activeTenantId)
+          .in('colaborador_id', colaboradorIds)
+        treinamentoIdsColaborador = tc?.map((t) => t.treinamento_id) ?? []
+      }
+
+      const todosIds = [
+        ...(parceiros?.map((p) => p.treinamento_id) ?? []),
+        ...treinamentoIdsColaborador,
+      ]
+      return [...new Set(todosIds)]
+    } catch {
+      return []
+    }
+  }
+
+  useEffect(() => {
+    if (!activeTenantId) return
+    const run = async () => {
+      if (!debouncedFiltroParticipante || debouncedFiltroParticipante.length < 2) {
+        setIdsPorParticipante(null)
+        return
+      }
+      const ids = await buscarTreinamentosPorParticipante(debouncedFiltroParticipante)
+      setIdsPorParticipante(ids)
+    }
+    run()
+  }, [debouncedFiltroParticipante, activeTenantId])
+
   useEffect(() => {
     if (!activeTenantId) return
 
@@ -712,7 +804,7 @@ export default function HistoricoPage() {
       clearInterval(pollId)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [activeTenantId])
+  }, [activeTenantId, idsPorParticipante])
 
   const filtered = treinamentos.filter((t) => {
     const matchTipo = filtroTipo === 'todos' || t.tipo === filtroTipo
@@ -729,6 +821,8 @@ export default function HistoricoPage() {
     setFiltroEmpresa('todas')
     setFiltroDataInicio('')
     setFiltroDataFim('')
+    setFiltroParticipante('')
+    setIdsPorParticipante(null)
   }
 
   const handleVerDetalhes = async (t: Treinamento) => {
@@ -832,6 +926,66 @@ export default function HistoricoPage() {
     }
   }
 
+  const buscarParticipantes = async (t: Treinamento) => {
+    if (!activeTenantId) return
+    setTreinamentoSelecionado(t)
+    setParticipantesDialogOpen(true)
+    setParticipantes([])
+    setBuscaParticipante('')
+    setLoadingParticipantes(true)
+    try {
+      if (t.tipo === 'parceiro') {
+        const { data, error } = await supabase
+          .from('treinamento_parceiros')
+          .select('nome, email')
+          .eq('treinamento_id', t.id)
+          .eq('tenant_id', activeTenantId)
+        if (error) throw error
+        setParticipantes((data as { nome: string; email: string }[]) ?? [])
+      } else {
+        const { data, error } = await supabase
+          .from('treinamento_colaboradores')
+          .select('colaboradores(nome, email)')
+          .eq('treinamento_id', t.id)
+          .eq('tenant_id', activeTenantId)
+        if (error) throw error
+        const rows = (data ?? []) as { colaboradores: { nome: string; email: string } | { nome: string; email: string }[] | null }[]
+        const list = rows.map((row) => {
+          const col = Array.isArray(row.colaboradores) ? row.colaboradores[0] : row.colaboradores
+          return { nome: col?.nome ?? '—', email: col?.email ?? '—' }
+        })
+        setParticipantes(list)
+      }
+    } catch (err) {
+      console.error('Erro ao buscar participantes:', err)
+      toast.error('Não foi possível carregar os participantes.')
+      setParticipantes([])
+    } finally {
+      setLoadingParticipantes(false)
+    }
+  }
+
+  const buscaParticipanteDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [debouncedBuscaParticipante, setDebouncedBuscaParticipante] = useState('')
+  useEffect(() => {
+    if (buscaParticipanteDebounceRef.current) clearTimeout(buscaParticipanteDebounceRef.current)
+    buscaParticipanteDebounceRef.current = setTimeout(() => {
+      setDebouncedBuscaParticipante(buscaParticipante)
+    }, 300)
+    return () => {
+      if (buscaParticipanteDebounceRef.current) clearTimeout(buscaParticipanteDebounceRef.current)
+    }
+  }, [buscaParticipante])
+
+  const participantesFiltradosParaExibir = useMemo(() => {
+    const termo = debouncedBuscaParticipante.trim().toLowerCase()
+    if (!termo) return participantes
+    return participantes.filter(
+      (p) =>
+        p.nome.toLowerCase().includes(termo) || p.email.toLowerCase().includes(termo)
+    )
+  }, [participantes, debouncedBuscaParticipante])
+
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '—'
     const [ano, mes, dia] = dateStr.split('-')
@@ -905,6 +1059,18 @@ export default function HistoricoPage() {
             onChange={(e) => setFiltroDataFim(e.target.value)}
             className="w-[150px]"
           />
+        </div>
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">Participante</Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por participante..."
+              value={filtroParticipante}
+              onChange={(e) => setFiltroParticipante(e.target.value)}
+              className="w-[200px] pl-9"
+            />
+          </div>
         </div>
         <Button variant="outline" size="sm" onClick={handleLimparFiltros}>
           Limpar Filtros
@@ -993,6 +1159,23 @@ export default function HistoricoPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
+                      <TooltipProvider delayDuration={0}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => buscarParticipantes(t)}
+                              className="gap-1"
+                              title="Ver Participantes"
+                            >
+                              <Users className="w-4 h-4" />
+                              Ver Participantes
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Ver Participantes</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1251,6 +1434,81 @@ export default function HistoricoPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Dialog Participantes */}
+      <Dialog open={participantesDialogOpen} onOpenChange={setParticipantesDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              Participantes — {treinamentoSelecionado?.nome ?? ''}
+            </DialogTitle>
+            {treinamentoSelecionado && (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="font-mono text-xs text-muted-foreground">
+                  {treinamentoSelecionado.codigo}
+                </span>
+                <span
+                  className={cn(
+                    'px-2 py-0.5 rounded-full text-xs font-medium',
+                    tipoConfig[treinamentoSelecionado.tipo] ?? tipoConfig.parceiro
+                  )}
+                >
+                  {tipoLabel[treinamentoSelecionado.tipo] ?? treinamentoSelecionado.tipo}
+                </span>
+              </div>
+            )}
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome ou e-mail..."
+                value={buscaParticipante}
+                onChange={(e) => setBuscaParticipante(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {participantesFiltradosParaExibir.length} participante(s) encontrado(s)
+            </p>
+            {loadingParticipantes ? (
+              <div className="space-y-3">
+                {[1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
+            ) : participantesFiltradosParaExibir.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Nenhum participante encontrado.
+              </p>
+            ) : (
+              <div className="rounded-lg border border-border overflow-hidden max-h-[280px] overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      <TableHead className="font-medium">Nome</TableHead>
+                      <TableHead className="font-medium">E-mail</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {participantesFiltradosParaExibir.map((p, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell className="font-medium">{p.nome}</TableCell>
+                        <TableCell className="text-muted-foreground">{p.email}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setParticipantesDialogOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Alert Excluir */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

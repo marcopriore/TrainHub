@@ -77,20 +77,65 @@ const PARTICIPANTES_ALIASES: Record<string, string[]> = {
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const HEADER_ALIASES_COLABORADOR: Record<string, string[]> = {
   ...HEADER_ALIASES_PARCEIRO,
-  colaboradores: ['Colaboradores (separados por ;)', 'colaboradores'],
 }
 
-function parseDateDDMMYYYY(str: string): Date | null {
-  const match = String(str || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  if (!match) return null
-  const [, d, m, y] = match
-  const day = parseInt(d!, 10)
-  const month = parseInt(m!, 10) - 1
-  const year = parseInt(y!, 10)
-  const date = new Date(year, month, day)
-  if (isNaN(date.getTime())) return null
-  if (date.getDate() !== day || date.getMonth() !== month || date.getFullYear() !== year) return null
-  return date
+/** Obtém valor de data, evitando coluna "#" (índice) que pode ser mapeada incorretamente */
+function getDataTreinamentoValue(row: Record<string, unknown>, headerAliases: Record<string, string[]>): unknown {
+  const val = getExcelValue(row, 'data_treinamento', headerAliases)
+  // Se veio número pequeno (1,2,3...) é provavelmente coluna #, buscar coluna de data explicitamente
+  const num = typeof val === 'number' ? val : parseFloat(String(val ?? ''))
+  if (!isNaN(num) && num >= 1 && num < 1000) {
+    const dataKey = Object.keys(row).find(
+      (k) =>
+        k !== '#' &&
+        k.toLowerCase().includes('data') &&
+        (k.toLowerCase().includes('treinamento') || k.toLowerCase().includes('dd/mm'))
+    )
+    if (dataKey) return row[dataKey]
+  }
+  return val
+}
+
+/** Converte valor de célula Excel (string DD/MM/AAAA, ISO, serial ou Date) em Date */
+function parseDateDDMMYYYY(val: unknown): Date | null {
+  if (val == null) return null
+  const str = String(val).trim()
+  if (!str) return null
+
+  // DD/MM/YYYY
+  const match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (match) {
+    const [, d, m, y] = match
+    const day = parseInt(d!, 10)
+    const month = parseInt(m!, 10) - 1
+    const year = parseInt(y!, 10)
+    const date = new Date(year, month, day)
+    if (isNaN(date.getTime())) return null
+    if (date.getDate() !== day || date.getMonth() !== month || date.getFullYear() !== year) return null
+    return date
+  }
+
+  // YYYY-MM-DD (ISO - Excel às vezes retorna assim)
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch
+    const date = new Date(parseInt(y!, 10), parseInt(m!, 10) - 1, parseInt(d!, 10))
+    return isNaN(date.getTime()) ? null : date
+  }
+
+  // Excel serial number (dias desde 30/12/1899)
+  // Valores < 1000 são provavelmente índice de linha (#), não datas (ex: 1/1/2000 = 36526)
+  const num = typeof val === 'number' ? val : parseFloat(str)
+  if (!isNaN(num) && num >= 1000) {
+    const epoch = new Date(1899, 11, 30)
+    const date = new Date(epoch.getTime() + num * 86400000)
+    return isNaN(date.getTime()) ? null : date
+  }
+
+  // Objeto Date
+  if (val instanceof Date && !isNaN(val.getTime())) return val
+
+  return null
 }
 
 function formatDateForDB(date: Date): string {
@@ -120,10 +165,6 @@ export function TreinamentoImportDialog({
   const empresasMap = React.useMemo(
     () => new Map(empresas.map((e) => [e.nome.toLowerCase(), e])),
     [empresas]
-  )
-  const colaboradoresMap = React.useMemo(
-    () => new Map(colaboradores.map((c) => [c.nome.toLowerCase(), c])),
-    [colaboradores]
   )
   const colaboradoresEmailsSet = React.useMemo(
     () => new Set(colaboradores.map((c) => (c.email ?? '').toLowerCase().trim()).filter(Boolean)),
@@ -203,7 +244,6 @@ export function TreinamentoImportDialog({
         'Data do Treinamento (DD/MM/AAAA)',
         'Índice de Satisfação (%)',
         'Índice de Aprovação (%)',
-        'Colaboradores (separados por ;)',
       ]
       const sample = {
         '#': '1',
@@ -215,13 +255,12 @@ export function TreinamentoImportDialog({
         'Data do Treinamento (DD/MM/AAAA)': '20/03/2025',
         'Índice de Satisfação (%)': '85',
         'Índice de Aprovação (%)': '90',
-        'Colaboradores (separados por ;)': 'João Silva;Maria Santos',
       }
       downloadImportTreinamentosTemplate(
         'Treinamentos',
         headers,
         sample,
-        [8, 25, 40, 40, 25, 25, 28, 22, 22, 40],
+        [8, 25, 40, 40, 25, 25, 28, 22, 22],
         [
           [1, 'João da Silva', 'joao@neocredito.com.br'],
           [2, 'Maria Santos', 'maria@neocredito.com.br'],
@@ -318,7 +357,7 @@ export function TreinamentoImportDialog({
         const objetivo = String(getExcelValue(row, 'objetivo', headerAliases) ?? '').trim()
         const cargaHoraria = Number(getExcelValue(row, 'carga_horaria', headerAliases))
         const empresaNome = String(getExcelValue(row, 'empresa_parceira', headerAliases) ?? '').trim()
-        const dataStr = String(getExcelValue(row, 'data_treinamento', headerAliases) ?? '').trim()
+        const dataVal = getDataTreinamentoValue(row, headerAliases)
         const indiceSatisfacao = Number(getExcelValue(row, 'indice_satisfacao', headerAliases))
         const indiceAprovacao = Number(getExcelValue(row, 'indice_aprovacao', headerAliases))
 
@@ -335,7 +374,7 @@ export function TreinamentoImportDialog({
           errs.push(`Linha ${linha}: Campo 'carga_horaria' deve ser maior que 0`)
           continue
         }
-        const dataObj = parseDateDDMMYYYY(dataStr)
+        const dataObj = parseDateDDMMYYYY(dataVal)
         if (!dataObj) {
           errs.push(`Linha ${linha}: Campo 'data_treinamento' deve estar no formato DD/MM/AAAA`)
           continue
@@ -359,7 +398,7 @@ export function TreinamentoImportDialog({
         }
         const dupKey = `${nome.toLowerCase()}|${dataFormatted}`
         if (existentesSet.has(dupKey)) {
-          errs.push(`Linha ${linha}: Treinamento "${nome}" na data ${dataStr} já existe`)
+          errs.push(`Linha ${linha}: Treinamento "${nome}" na data ${dataFormatted} já existe`)
           continue
         }
         existentesSet.add(dupKey)
@@ -394,10 +433,9 @@ export function TreinamentoImportDialog({
         const objetivo = String(getExcelValue(row, 'objetivo', headerAliases) ?? '').trim()
         const cargaHoraria = Number(getExcelValue(row, 'carga_horaria', headerAliases))
         const empresaNome = String(getExcelValue(row, 'empresa_parceira', headerAliases) ?? '').trim()
-        const dataStr = String(getExcelValue(row, 'data_treinamento', headerAliases) ?? '').trim()
+        const dataVal = getDataTreinamentoValue(row, headerAliases)
         const indiceSatisfacao = Number(getExcelValue(row, 'indice_satisfacao', headerAliases))
         const indiceAprovacao = Number(getExcelValue(row, 'indice_aprovacao', headerAliases))
-        const colaboradoresStr = String(getExcelValue(row, 'colaboradores', headerAliases) ?? '').trim()
 
         if (!nome) {
           errs.push(`Linha ${linha}: Campo 'nome' obrigatório`)
@@ -412,7 +450,7 @@ export function TreinamentoImportDialog({
           errs.push(`Linha ${linha}: Campo 'carga_horaria' deve ser maior que 0`)
           continue
         }
-        const dataObj = parseDateDDMMYYYY(dataStr)
+        const dataObj = parseDateDDMMYYYY(dataVal)
         if (!dataObj) {
           errs.push(`Linha ${linha}: Campo 'data_treinamento' deve estar no formato DD/MM/AAAA`)
           continue
@@ -434,36 +472,9 @@ export function TreinamentoImportDialog({
           errs.push(`Linha ${linha}: 'indice_aprovacao' deve ser entre 0 e 100`)
           continue
         }
-        if (!colaboradoresStr) {
-          errs.push(`Linha ${linha}: Campo 'colaboradores' obrigatório`)
-          continue
-        }
-        const nomesColab = colaboradoresStr
-          .split(';')
-          .map((n) => n.trim())
-          .filter(Boolean)
-        const nomesUnicos = new Set(nomesColab.map((n) => n.toLowerCase()))
-        if (nomesUnicos.size !== nomesColab.length) {
-          errs.push(`Linha ${linha}: colaboradores com nomes duplicados na mesma linha`)
-          continue
-        }
-        const colabIds: string[] = []
-        for (const n of nomesColab) {
-          const col = colaboradoresMap.get(n.toLowerCase())
-          if (!col) {
-            errs.push(`Linha ${linha}: Colaborador "${n}" não encontrado`)
-            break
-          }
-          colabIds.push(col.id)
-        }
-        if (errs.length > 0 && errs[errs.length - 1]?.includes(`Linha ${linha}`)) continue
-        if (colabIds.length === 0) {
-          errs.push(`Linha ${linha}: Informe ao menos um colaborador válido`)
-          continue
-        }
         const dupKey = `${nome.toLowerCase()}|${dataFormatted}`
         if (existentesSet.has(dupKey)) {
-          errs.push(`Linha ${linha}: Treinamento "${nome}" na data ${dataStr} já existe`)
+          errs.push(`Linha ${linha}: Treinamento "${nome}" na data ${dataFormatted} já existe`)
           continue
         }
         existentesSet.add(dupKey)
@@ -478,8 +489,6 @@ export function TreinamentoImportDialog({
           data_treinamento: dataFormatted,
           indice_satisfacao: indiceSatisfacao,
           indice_aprovacao: indiceAprovacao,
-          colaborador_ids: colabIds,
-          colaboradores: colaboradoresStr,
         })
       }
       parseAndValidateParticipantes(dataRows.length)
@@ -571,7 +580,6 @@ export function TreinamentoImportDialog({
       : [
           { key: 'nome', label: 'Nome' },
           { key: 'empresa_parceira_id', label: 'Empresa' },
-          { key: 'colaboradores', label: 'Colaboradores' },
           { key: 'data_treinamento', label: 'Data' },
           { key: '_participantes', label: 'Participantes' },
         ]
