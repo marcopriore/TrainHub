@@ -631,7 +631,7 @@ function ParceiroForm({
         </div>
       </FormField>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-[minmax(100px,160px)_minmax(120px,1fr)_1fr] gap-4">
         <FormField label="Carga Horária (horas)" error={errors.cargaHoraria?.message}>
           <div className="relative">
             <Input
@@ -650,6 +650,9 @@ function ParceiroForm({
               horas
             </span>
           </div>
+        </FormField>
+        <FormField label="Data do Treinamento" error={errors.dataTreinamento?.message}>
+          <Input type="date" {...register('dataTreinamento')} />
         </FormField>
         <FormField label="Empresa Parceira" error={errors.empresaParceiraId?.message}>
           <Controller
@@ -675,10 +678,6 @@ function ParceiroForm({
           />
         </FormField>
       </div>
-
-      <FormField label="Data do Treinamento" error={errors.dataTreinamento?.message}>
-        <Input type="date" {...register('dataTreinamento')} />
-      </FormField>
 
       <div className="space-y-3">
         <Label className="text-sm font-medium text-foreground">Índice de Satisfação</Label>
@@ -1469,7 +1468,7 @@ function ColaboradorForm({
         </div>
       </FormField>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-[minmax(100px,160px)_minmax(120px,1fr)_1fr] gap-4">
         <FormField label="Carga Horária (horas)" error={errors.cargaHoraria?.message}>
           <div className="relative">
             <Input
@@ -1488,6 +1487,9 @@ function ColaboradorForm({
               horas
             </span>
           </div>
+        </FormField>
+        <FormField label="Data do Treinamento" error={errors.dataTreinamento?.message}>
+          <Input type="date" {...register('dataTreinamento')} />
         </FormField>
         <FormField label="Empresa Parceira / Fornecedor" error={errors.empresaParceiraId?.message}>
           <Controller
@@ -1513,10 +1515,6 @@ function ColaboradorForm({
           />
         </FormField>
       </div>
-
-      <FormField label="Data do Treinamento" error={errors.dataTreinamento?.message}>
-        <Input type="date" {...register('dataTreinamento')} />
-      </FormField>
 
       <div className="space-y-3">
         <Label className="text-sm font-medium text-foreground">Índice de Satisfação</Label>
