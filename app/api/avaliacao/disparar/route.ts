@@ -56,7 +56,6 @@ export async function POST(request: NextRequest) {
       treinamento_id?: string
       tenant_id?: string
     }
-
     if (
       !treinamento_id ||
       typeof treinamento_id !== 'string' ||
@@ -151,41 +150,35 @@ export async function POST(request: NextRequest) {
       let token: string
 
       if (existingToken) {
-        const { data: tokenRow } = await supabaseAdmin
-          .from('avaliacao_tokens')
-          .select('token')
-          .eq('id', (existingToken as { id: string }).id)
-          .single()
-        token = (tokenRow as { token: string } | null)?.token ?? ''
-        if (token) {
-          jaExistiam += 1
-        } else {
-          erros.push(`${participante.email}: Token não encontrado`)
-          continue
-        }
+        jaExistiam += 1
+        continue
       } else {
-        token = crypto.randomUUID()
-        const { error: insertErr } = await supabaseAdmin
+        const { data: insertTokenResult, error: insertTokenError } = await supabaseAdmin
           .from('avaliacao_tokens')
           .insert({
-            formulario_id: form.id,
             tenant_id,
-            token,
+            formulario_id: form.id,
+            treinamento_id,
             respondente_nome: participante.nome || null,
             respondente_email: participante.email,
             respondente_tipo: participante.tipo,
+            token: crypto.randomUUID(),
             usado: false,
           })
+          .select('token')
+          .single()
 
-        if (insertErr) {
-          erros.push(`${participante.email}: ${insertErr.message}`)
+        if (insertTokenError) {
+          erros.push(`${participante.email}: ${insertTokenError.message}`)
           continue
         }
+
+        token = (insertTokenResult as { token: string } | null)?.token ?? ''
       }
 
       const link = `${appUrl}/avaliacao/${token}`
 
-      const { error: emailError } = await resend.emails.send({
+      const resendResult = await resend.emails.send({
         from: 'TrainHub <onboarding@resend.dev>',
         to: participante.email,
         subject: `Avaliação disponível: ${form.titulo}`,
@@ -228,10 +221,10 @@ export async function POST(request: NextRequest) {
   `,
       })
 
-      if (emailError) {
-        erros.push(`${participante.email}: ${emailError.message}`)
-      } else {
+      if (!resendResult.error) {
         enviados += 1
+      } else {
+        erros.push(`${participante.email}: ${resendResult.error.message}`)
       }
     }
 
