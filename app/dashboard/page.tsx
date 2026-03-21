@@ -70,6 +70,8 @@ export default function ModulosPage() {
     user?.isMaster?.() || modulosAtivos['gestao'] === true
   const podeAcessarTrilhas =
     user?.isMaster?.() || modulosAtivos['trilhas'] === true
+  const podeAcessarAvaliacoes =
+    user?.isMaster?.() || modulosAtivos['avaliacoes'] === true
   const podeAcessarConfiguracoes = user?.isMaster?.() || user?.isAdmin?.()
 
   const initials = user?.nome
@@ -339,34 +341,76 @@ export default function ModulosPage() {
             </div>
           </div>
 
-          {/* Card 4 — Avaliações e Certificados */}
-          <div
-            className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 opacity-60 cursor-not-allowed"
-          >
-            <div className="flex justify-between items-start">
-              <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: `${COR_AVALIACOES}1a`, color: COR_AVALIACOES }}
-              >
-                <Award className="w-6 h-6" />
+          {/* Card 4 — Avaliações */}
+          {podeAcessarAvaliacoes ? (
+            <Link
+              href="/dashboard/avaliacoes"
+              className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 hover:shadow-md hover:border-[#f59e0b]/40 transition-all duration-200 cursor-pointer group"
+            >
+              <div className="flex justify-between items-start">
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${COR_AVALIACOES}1a`, color: COR_AVALIACOES }}
+                >
+                  <Award className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400">
+                  Ativo
+                </span>
               </div>
-              <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                Em breve
-              </span>
+              <div>
+                <h2 className="font-semibold text-lg text-foreground">
+                  Avaliações
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Realize avaliações e obtenha certificados de conclusão
+                </p>
+              </div>
+              <div className="flex items-center gap-1 text-sm font-medium" style={{ color: COR_AVALIACOES }}>
+                <span>Acessar</span>
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            </Link>
+          ) : (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() =>
+                toast.error('Este módulo não está habilitado para sua organização. Entre em contato com o administrador.')
+              }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  toast.error('Este módulo não está habilitado para sua organização. Entre em contato com o administrador.')
+                }
+              }}
+              className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 opacity-60 cursor-not-allowed"
+            >
+              <div className="flex justify-between items-start">
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${COR_AVALIACOES}1a`, color: COR_AVALIACOES }}
+                >
+                  <Award className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                  Sem acesso
+                </span>
+              </div>
+              <div>
+                <h2 className="font-semibold text-lg text-foreground">
+                  Avaliações
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Realize avaliações e obtenha certificados de conclusão
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Lock className="w-4 h-4" />
+                <span>Sem acesso</span>
+              </div>
             </div>
-            <div>
-              <h2 className="font-semibold text-lg text-foreground">
-                Avaliações e Certificados
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Realize avaliações e obtenha certificados de conclusão
-              </p>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Lock className="w-4 h-4" />
-              <span>Em breve</span>
-            </div>
-          </div>
+          )}
         </div>
         )}
       </main>

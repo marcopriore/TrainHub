@@ -28,6 +28,7 @@ export const PERMISSOES = [
   'gerenciar_catalogo',
   'gerenciar_categorias',
   'gerenciar_pesquisas',
+  'gerenciar_avaliacoes',
 ] as const
 
 export const PERMISSOES_LABELS: Record<string, string> = {
@@ -52,6 +53,7 @@ export const PERMISSOES_LABELS: Record<string, string> = {
   gerenciar_catalogo: 'Gerenciar Catálogo de Treinamentos',
   gerenciar_categorias: 'Gerenciar Categorias de Treinamentos',
   gerenciar_pesquisas: 'Gerenciar Pesquisas de Satisfação',
+  gerenciar_avaliacoes: 'Gerenciar Avaliações',
 }
 
 export type Permissao = (typeof PERMISSOES)[number]
