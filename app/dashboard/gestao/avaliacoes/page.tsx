@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, Settings } from 'lucide-react'
+import { Plus, Pencil, Trash2, Settings, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@/lib/use-user'
@@ -19,6 +19,14 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -28,6 +36,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -68,6 +82,10 @@ export default function AvaliacoesPage() {
   const [descricao, setDescricao] = useState('')
   const [notaMinima, setNotaMinima] = useState(70)
   const [submitting, setSubmitting] = useState(false)
+
+  const [dispararDialogOpen, setDispararDialogOpen] = useState(false)
+  const [avaliacaoSelecionada, setAvaliacaoSelecionada] = useState<AvaliacaoFormulario | null>(null)
+  const [disparando, setDisparando] = useState(false)
 
   const supabase = createClient()
 
@@ -192,6 +210,39 @@ export default function AvaliacoesPage() {
     setDeleteDialogOpen(true)
   }
 
+  const openDispararDialog = (f: AvaliacaoFormulario) => {
+    setAvaliacaoSelecionada(f)
+    setDispararDialogOpen(true)
+  }
+
+  const handleDisparar = async () => {
+    if (!avaliacaoSelecionada || !activeTenantId) return
+    setDisparando(true)
+    try {
+      const res = await fetch('/api/avaliacao/disparar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          treinamento_id: avaliacaoSelecionada.treinamento_id,
+          tenant_id: activeTenantId,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error ?? 'Erro ao disparar avaliação.')
+        return
+      }
+      toast.success(
+        `E-mails enviados: ${data.enviados}. Já existiam: ${data.jaExistiam}.`
+      )
+      setDispararDialogOpen(false)
+    } catch {
+      toast.error('Erro ao conectar com o servidor.')
+    } finally {
+      setDisparando(false)
+    }
+  }
+
   const handleDelete = async () => {
     if (!formularioToDelete) return
     setSubmitting(true)
@@ -282,6 +333,22 @@ export default function AvaliacoesPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1 flex-wrap">
+                      <TooltipProvider delayDuration={0}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openDispararDialog(f)}
+                              className="gap-1"
+                            >
+                              <Send className="w-4 h-4" />
+                              Disparar
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Disparar avaliação por e-mail</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                       <Button variant="ghost" size="sm" asChild className="gap-1">
                         <Link href={`/dashboard/gestao/avaliacoes/${f.id}`}>
                           <Settings className="w-4 h-4" />
@@ -362,6 +429,39 @@ export default function AvaliacoesPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <Dialog open={dispararDialogOpen} onOpenChange={setDispararDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Disparar Avaliação por E-mail</DialogTitle>
+            <DialogDescription>
+              Isso irá enviar um e-mail com o link da avaliação para todos os
+              participantes do treinamento que ainda não receberam.
+              Participantes que já receberam não serão notificados novamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-muted rounded p-3 text-sm">
+            <p>
+              <strong>Avaliação:</strong> {avaliacaoSelecionada?.titulo}
+            </p>
+            <p>
+              <strong>Treinamento:</strong> {avaliacaoSelecionada?.treinamentos?.nome ?? '—'}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDispararDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleDisparar}
+              disabled={disparando}
+              className="bg-[#00C9A7] hover:bg-[#00C9A7]/90 text-white"
+            >
+              {disparando ? 'Enviando...' : 'Confirmar e Disparar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
