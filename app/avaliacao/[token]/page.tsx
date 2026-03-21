@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
-import { GraduationCap, CheckCircle, XCircle, ArrowLeft, AlertTriangle } from 'lucide-react'
+import { useParams } from 'next/navigation'
+import { GraduationCap, CheckCircle, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -25,7 +24,6 @@ type PageState =
   | 'invalido'
   | 'ja_respondido'
   | 'formulario'
-  | 'leitura'
   | 'resultado'
 
 interface TokenData {
@@ -57,20 +55,11 @@ interface Pergunta {
   ordem: number
 }
 
-interface RespostaRow {
-  pergunta_id: string
-  opcao_selecionada: string | null
-  valor_numerico: number | null
-  valor_texto: string | null
-}
-
 const TIPOS_SUPORTADOS = ['multipla_escolha', 'verdadeiro_falso']
 
 export default function AvaliacaoTokenPage() {
   const params = useParams()
-  const searchParams = useSearchParams()
   const tokenParam = typeof params?.token === 'string' ? params.token : ''
-  const modoLeitura = searchParams?.get('modo') === 'leitura'
 
   const [state, setState] = useState<PageState>('loading')
   const [tokenData, setTokenData] = useState<TokenData | null>(null)
@@ -123,7 +112,7 @@ export default function AvaliacaoTokenPage() {
 
       const token = tokenRow as unknown as TokenData
 
-      if (token.usado && !modoLeitura) {
+      if (token.usado) {
         setTokenData(token)
         setState('ja_respondido')
         return
@@ -143,38 +132,14 @@ export default function AvaliacaoTokenPage() {
 
       setTokenData(token)
       setPerguntas((perguntasData as Pergunta[]) ?? [])
-
-      if (modoLeitura && token.usado) {
-        const { data: respostasData, error: respostasError } = await supabase
-          .from('avaliacao_respostas')
-          .select('pergunta_id, opcao_selecionada, valor_numerico, valor_texto')
-          .eq('token_id', token.id)
-
-        if (cancelled) return
-        if (!respostasError && respostasData) {
-          const mapa: Record<string, number | string> = {}
-          ;(respostasData as RespostaRow[]).forEach((r) => {
-            if (r.valor_numerico != null) {
-              mapa[r.pergunta_id] = r.valor_numerico
-            } else if (r.opcao_selecionada != null) {
-              mapa[r.pergunta_id] = r.opcao_selecionada
-            } else if (r.valor_texto != null) {
-              mapa[r.pergunta_id] = r.valor_texto
-            }
-          })
-          setRespostas(mapa)
-        }
-        setState('leitura')
-      } else {
-        setState('formulario')
-      }
+      setState('formulario')
     }
 
     load()
     return () => {
       cancelled = true
     }
-  }, [tokenParam, modoLeitura])
+  }, [tokenParam])
 
   const handleRespostaChange = (perguntaId: string, value: number | string) => {
     setRespostas((prev) => ({ ...prev, [perguntaId]: value }))
@@ -297,23 +262,6 @@ export default function AvaliacaoTokenPage() {
   const respondenteNome = tokenData?.respondente_nome
   const notaMinima = form?.nota_minima ?? 70
 
-  const getRespostaDada = (perguntaId: string): number | string | null => {
-    const v = respostas[perguntaId]
-    if (v === undefined || v === null) return null
-    return v
-  }
-
-  const isRespostaCorreta = (p: Pergunta, valor: number | string | null): boolean => {
-    if (valor == null || !p.resposta_correta) return false
-    if (typeof valor === 'number') return String(valor) === p.resposta_correta
-    return valor === p.resposta_correta
-  }
-
-  const isRespostaErrada = (p: Pergunta, valor: number | string | null): boolean => {
-    if (valor == null || !p.resposta_correta) return false
-    return !isRespostaCorreta(p, valor)
-  }
-
   if (state === 'loading') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -341,24 +289,57 @@ export default function AvaliacaoTokenPage() {
   }
 
   if (state === 'ja_respondido') {
+    const aprovado = tokenData?.aprovado
+    const nota = tokenData?.nota
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
-        <Card className="max-w-md w-full">
+        <Card
+          className={cn(
+            'max-w-md w-full',
+            aprovado === true && 'border-green-500/50',
+            aprovado === false && 'border-destructive/50',
+            aprovado === null && 'border-[#00C9A7]/50'
+          )}
+        >
           <CardHeader className="text-center">
             <div className="flex justify-center mb-2">
-              <CheckCircle className="h-12 w-12 text-[#00C9A7]" />
+              {aprovado === true && (
+                <CheckCircle2 className="h-12 w-12 text-green-600" />
+              )}
+              {aprovado === false && (
+                <XCircle className="h-12 w-12 text-destructive" />
+              )}
+              {aprovado === null && (
+                <CheckCircle2 className="h-12 w-12 text-[#00C9A7]" />
+              )}
             </div>
-            <CardTitle className="font-serif text-xl">Esta avaliação já foi respondida</CardTitle>
+            <CardTitle className="font-serif text-xl">Avaliação já respondida</CardTitle>
             <CardDescription>
-              Você já respondeu esta avaliação. Clique abaixo para ver suas respostas e o resultado.
+              Esta avaliação já foi respondida e não pode ser alterada.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Button asChild className="w-full bg-[#00C9A7] hover:bg-[#00C9A7]/90">
-              <Link href={`/avaliacao/${tokenParam}?modo=leitura`}>
-                Ver respostas
-              </Link>
-            </Button>
+          <CardContent className="flex flex-col items-center gap-2">
+            {aprovado === true && (
+              <>
+                <Badge className="bg-green-500/10 text-green-600 border-green-500/40">
+                  Aprovado
+                </Badge>
+                <span className="text-sm">Sua nota: {nota ?? '—'}%</span>
+              </>
+            )}
+            {aprovado === false && (
+              <>
+                <Badge className="bg-destructive/10 text-destructive border-destructive/40">
+                  Reprovado
+                </Badge>
+                <span className="text-sm">Sua nota: {nota ?? '—'}%</span>
+              </>
+            )}
+            {aprovado === null && (
+              <Badge className="bg-muted text-muted-foreground">
+                Respondido
+              </Badge>
+            )}
           </CardContent>
         </Card>
         <div className="mt-8 flex items-center gap-2 text-muted-foreground">
@@ -419,19 +400,9 @@ export default function AvaliacaoTokenPage() {
       <div className="max-w-2xl mx-auto px-4 py-12">
         <Card>
           <CardHeader className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <GraduationCap className="h-8 w-8 text-[#00C9A7]" />
-                <span className="font-serif text-xl font-semibold text-[#00C9A7]">TrainHub</span>
-              </div>
-              {state === 'leitura' && (
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="#" onClick={() => window.history.back()}>
-                    <ArrowLeft className="w-4 h-4 mr-1" />
-                    Voltar
-                  </Link>
-                </Button>
-              )}
+            <div className="flex items-center gap-2">
+              <GraduationCap className="h-8 w-8 text-[#00C9A7]" />
+              <span className="font-serif text-xl font-semibold text-[#00C9A7]">TrainHub</span>
             </div>
             <CardTitle className="font-serif text-2xl font-bold">{titulo}</CardTitle>
             {form?.descricao && (
@@ -460,7 +431,7 @@ export default function AvaliacaoTokenPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-8">
-            {(state === 'formulario' || state === 'leitura') && (
+            {state === 'formulario' && (
               <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-4 flex gap-3">
                 <AlertTriangle className="h-5 w-5 shrink-0 text-yellow-600" />
                 <div className="space-y-1">
@@ -490,31 +461,7 @@ export default function AvaliacaoTokenPage() {
                   <p className="text-sm text-destructive">{errors[p.id]}</p>
                 )}
 
-                {state === 'leitura' ? (
-                  <div className="text-muted-foreground pl-2">
-                    <div className="space-y-1">
-                      <p
-                        className={cn(
-                          'font-medium',
-                          isRespostaCorreta(p, getRespostaDada(p.id))
-                            ? 'text-green-600'
-                            : isRespostaErrada(p, getRespostaDada(p.id))
-                              ? 'text-destructive'
-                              : ''
-                        )}
-                      >
-                        Resposta: {String(getRespostaDada(p.id) ?? '—')}
-                      </p>
-                      {p.resposta_correta && (
-                        <p className="text-sm text-green-600">
-                          Correta: {p.resposta_correta}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {p.tipo === 'multipla_escolha' && (
+                {p.tipo === 'multipla_escolha' && (
                       <RadioGroup
                         value={String(respostas[p.id] ?? '')}
                         onValueChange={(v) => handleRespostaChange(p.id, v)}
@@ -537,66 +484,30 @@ export default function AvaliacaoTokenPage() {
                       </RadioGroup>
                     )}
 
-                    {p.tipo === 'verdadeiro_falso' && (
-                      <RadioGroup
-                        value={String(respostas[p.id] ?? '')}
-                        onValueChange={(v) => handleRespostaChange(p.id, v)}
-                        className="space-y-2"
+                {p.tipo === 'verdadeiro_falso' && (
+                  <RadioGroup
+                    value={String(respostas[p.id] ?? '')}
+                    onValueChange={(v) => handleRespostaChange(p.id, v)}
+                    className="space-y-2"
+                  >
+                    {['Verdadeiro', 'Falso'].map((op) => (
+                      <div
+                        key={op}
+                        className="flex items-center space-x-2 rounded-lg border px-4 py-3 hover:bg-muted/50"
                       >
-                        {['Verdadeiro', 'Falso'].map((op) => (
-                          <div
-                            key={op}
-                            className="flex items-center space-x-2 rounded-lg border px-4 py-3 hover:bg-muted/50"
-                          >
-                            <RadioGroupItem value={op} id={`${p.id}-${op}`} />
-                            <Label
-                              htmlFor={`${p.id}-${op}`}
-                              className="flex-1 cursor-pointer font-normal"
-                            >
-                              {op}
-                            </Label>
-                          </div>
-                        ))}
-                      </RadioGroup>
-                    )}
-                  </>
+                        <RadioGroupItem value={op} id={`${p.id}-${op}`} />
+                        <Label
+                          htmlFor={`${p.id}-${op}`}
+                          className="flex-1 cursor-pointer font-normal"
+                        >
+                          {op}
+                        </Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
                 )}
               </div>
             ))}
-
-            {state === 'leitura' && tokenData && (
-              <div className="pt-4 space-y-4">
-                <Separator />
-                <div className="flex items-center gap-3">
-                  <span className="font-medium">Sua nota:</span>
-                  <Badge
-                    className={cn(
-                      tokenData.aprovado === true && 'bg-green-500/10 text-green-600 border-green-500/40',
-                      tokenData.aprovado === false && 'bg-destructive/10 text-destructive border-destructive/40',
-                      tokenData.aprovado === null && 'bg-muted text-muted-foreground'
-                    )}
-                  >
-                    {tokenData.nota != null ? `${tokenData.nota}%` : '—'}
-                  </Badge>
-                  {tokenData.aprovado === true && (
-                    <Badge className="bg-green-500/10 text-green-600 border-green-500/40">
-                      Aprovado
-                    </Badge>
-                  )}
-                  {tokenData.aprovado === false && (
-                    <Badge className="bg-destructive/10 text-destructive border-destructive/40">
-                      Reprovado
-                    </Badge>
-                  )}
-                </div>
-                <Button variant="outline" asChild>
-                  <Link href="#" onClick={() => window.history.back()}>
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Voltar
-                  </Link>
-                </Button>
-              </div>
-            )}
           </CardContent>
         </Card>
 

@@ -608,6 +608,9 @@ export default function HistoricoPage() {
   const [loadingAvaliacao, setLoadingAvaliacao] = useState(false)
   const [expandedTokenId, setExpandedTokenId] = useState<string | null>(null)
   const [respostasPorToken, setRespostasPorToken] = useState<Map<string, RespostaDetalhe[]>>(new Map())
+  const [mediasPorTreinamento, setMediasPorTreinamento] = useState<Map<string, number>>(new Map())
+  const [treinamentosComAvaliacao, setTreinamentosComAvaliacao] = useState<Set<string>>(new Set())
+  const [notaMinimaPorTreinamento, setNotaMinimaPorTreinamento] = useState<Map<string, number>>(new Map())
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const supabase = createClient()
@@ -673,8 +676,55 @@ export default function HistoricoPage() {
           .order('codigo', { ascending: false })
           .range(from, to)
         if (error) throw error
-        setTreinamentos((data as unknown as Treinamento[]) ?? [])
+        const treinamentosData = (data as unknown as Treinamento[]) ?? []
+        setTreinamentos(treinamentosData)
         setTotalRegistros(count ?? 0)
+
+        const treinamentoIds = treinamentosData.map((t) => t.id)
+        if (treinamentoIds.length > 0) {
+          const { data: mediasAvaliacao } = await supabase
+            .from('avaliacao_tokens')
+            .select('treinamento_id, nota')
+            .eq('tenant_id', activeTenantId)
+            .eq('usado', true)
+            .in('treinamento_id', treinamentoIds)
+            .not('nota', 'is', null)
+
+          const { data: avaliacoesVinculadas } = await supabase
+            .from('avaliacao_formularios')
+            .select('treinamento_id, nota_minima')
+            .eq('tenant_id', activeTenantId)
+            .in('treinamento_id', treinamentoIds)
+
+          const mediasMap = new Map<string, number>()
+          if (mediasAvaliacao) {
+            const grupos = new Map<string, number[]>()
+            for (const row of mediasAvaliacao as { treinamento_id: string; nota: number }[]) {
+              if (!grupos.has(row.treinamento_id)) grupos.set(row.treinamento_id, [])
+              grupos.get(row.treinamento_id)!.push(row.nota)
+            }
+            for (const [id, notas] of grupos) {
+              const media = notas.reduce((a, b) => a + b, 0) / notas.length
+              mediasMap.set(id, Math.round(media))
+            }
+          }
+          setMediasPorTreinamento(mediasMap)
+
+          const comAvaliacao = new Set(
+            (avaliacoesVinculadas as { treinamento_id: string }[] | null)?.map((a) => a.treinamento_id) ?? []
+          )
+          setTreinamentosComAvaliacao(comAvaliacao)
+
+          const notaMinimaMap = new Map<string, number>()
+          ;(avaliacoesVinculadas as { treinamento_id: string; nota_minima: number }[] | null)?.forEach((a) => {
+            notaMinimaMap.set(a.treinamento_id, a.nota_minima ?? 70)
+          })
+          setNotaMinimaPorTreinamento(notaMinimaMap)
+        } else {
+          setMediasPorTreinamento(new Map())
+          setTreinamentosComAvaliacao(new Set())
+          setNotaMinimaPorTreinamento(new Map())
+        }
         return
       }
 
@@ -733,8 +783,55 @@ export default function HistoricoPage() {
         .order('codigo', { ascending: false })
         .range(from, to)
       if (error) throw error
-      setTreinamentos((data as unknown as Treinamento[]) ?? [])
+      const treinamentosData = (data as unknown as Treinamento[]) ?? []
+      setTreinamentos(treinamentosData)
       setTotalRegistros(count ?? 0)
+
+      const treinamentoIds = treinamentosData.map((t) => t.id)
+      if (treinamentoIds.length > 0) {
+        const { data: mediasAvaliacao } = await supabase
+          .from('avaliacao_tokens')
+          .select('treinamento_id, nota')
+          .eq('tenant_id', activeTenantId)
+          .eq('usado', true)
+          .in('treinamento_id', treinamentoIds)
+          .not('nota', 'is', null)
+
+        const { data: avaliacoesVinculadas } = await supabase
+          .from('avaliacao_formularios')
+          .select('treinamento_id, nota_minima')
+          .eq('tenant_id', activeTenantId)
+          .in('treinamento_id', treinamentoIds)
+
+        const mediasMap = new Map<string, number>()
+        if (mediasAvaliacao) {
+          const grupos = new Map<string, number[]>()
+          for (const row of mediasAvaliacao as { treinamento_id: string; nota: number }[]) {
+            if (!grupos.has(row.treinamento_id)) grupos.set(row.treinamento_id, [])
+            grupos.get(row.treinamento_id)!.push(row.nota)
+          }
+          for (const [id, notas] of grupos) {
+            const media = notas.reduce((a, b) => a + b, 0) / notas.length
+            mediasMap.set(id, Math.round(media))
+          }
+        }
+        setMediasPorTreinamento(mediasMap)
+
+        const comAvaliacao = new Set(
+          (avaliacoesVinculadas as { treinamento_id: string }[] | null)?.map((a) => a.treinamento_id) ?? []
+        )
+        setTreinamentosComAvaliacao(comAvaliacao)
+
+        const notaMinimaMap = new Map<string, number>()
+        ;(avaliacoesVinculadas as { treinamento_id: string; nota_minima: number }[] | null)?.forEach((a) => {
+          notaMinimaMap.set(a.treinamento_id, a.nota_minima ?? 70)
+        })
+        setNotaMinimaPorTreinamento(notaMinimaMap)
+      } else {
+        setMediasPorTreinamento(new Map())
+        setTreinamentosComAvaliacao(new Set())
+        setNotaMinimaPorTreinamento(new Map())
+      }
     } catch (error) {
       console.error('Erro ao carregar treinamentos:', error)
       toast.error('Não foi possível carregar os treinamentos. Tente novamente.')
@@ -1501,6 +1598,7 @@ export default function HistoricoPage() {
                 <TableHead className="font-medium">C. H.</TableHead>
                 <TableHead className="font-medium">Data</TableHead>
                 <TableHead className="font-medium">Satisfação</TableHead>
+                <TableHead className="font-medium">Avaliação</TableHead>
                 <TableHead className="font-medium">Aprovação</TableHead>
                 <TableHead className="font-medium w-[140px]">Ações</TableHead>
               </TableRow>
@@ -1543,6 +1641,34 @@ export default function HistoricoPage() {
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const media = mediasPorTreinamento.get(t.id)
+                      const temAvaliacao = treinamentosComAvaliacao.has(t.id)
+                      const notaMinima = notaMinimaPorTreinamento.get(t.id) ?? 70
+                      if (!temAvaliacao) {
+                        return (
+                          <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                            N/A
+                          </Badge>
+                        )
+                      }
+                      if (media === undefined) {
+                        return <span className="text-muted-foreground">—</span>
+                      }
+                      const aprovado = media >= notaMinima
+                      return (
+                        <span
+                          className={cn(
+                            'font-medium',
+                            aprovado ? 'text-green-600' : 'text-destructive'
+                          )}
+                        >
+                          {media}%
+                        </span>
+                      )
+                    })()}
                   </TableCell>
                   <TableCell>
                     {t.indice_aprovacao != null ? (
