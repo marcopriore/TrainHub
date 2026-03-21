@@ -64,9 +64,6 @@ interface Pergunta {
 const tipoOptions = [
   { value: 'multipla_escolha', label: 'Múltipla Escolha' },
   { value: 'verdadeiro_falso', label: 'Verdadeiro ou Falso' },
-  { value: 'dissertacao', label: 'Dissertação' },
-  { value: 'escala_numerica', label: 'Escala Numérica (1 a 5)' },
-  { value: 'escala_qualitativa', label: 'Escala Qualitativa' },
 ]
 
 type PerguntaFormValues = {

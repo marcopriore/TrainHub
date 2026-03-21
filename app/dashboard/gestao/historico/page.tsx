@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useMemo } from 'react'
+import React, { useEffect, useState, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Eye,
@@ -17,6 +17,9 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form'
 import { z } from 'zod'
@@ -64,10 +67,12 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
 import {
   Tooltip,
   TooltipContent,
@@ -104,6 +109,25 @@ interface ColaboradorComSetor {
   id: string
   nome: string
   colaboradores: { nome: string; setores: { nome: string } | null } | null
+}
+
+type AvaliacaoTokenRow = {
+  id: string
+  respondente_nome: string | null
+  respondente_email: string
+  respondente_tipo: string
+  usado: boolean
+  nota: number | null
+  aprovado: boolean | null
+  respondido_em: string | null
+  token: string
+}
+
+type RespostaDetalhe = {
+  pergunta_texto: string
+  tipo: string
+  opcao_selecionada: string | null
+  resposta_correta: string | null
 }
 
 const tipoConfig: Record<string, string> = {
@@ -576,6 +600,14 @@ export default function HistoricoPage() {
   const [filtroParticipante, setFiltroParticipante] = useState('')
   const [debouncedFiltroParticipante, setDebouncedFiltroParticipante] = useState('')
   const [idsPorParticipante, setIdsPorParticipante] = useState<string[] | null>(null)
+
+  const [avaliacaoDialogOpen, setAvaliacaoDialogOpen] = useState(false)
+  const [treinamentoAvaliacao, setTreinamentoAvaliacao] = useState<Treinamento | null>(null)
+  const [avaliacaoTokens, setAvaliacaoTokens] = useState<AvaliacaoTokenRow[]>([])
+  const [avaliacaoSemFormulario, setAvaliacaoSemFormulario] = useState(false)
+  const [loadingAvaliacao, setLoadingAvaliacao] = useState(false)
+  const [expandedTokenId, setExpandedTokenId] = useState<string | null>(null)
+  const [respostasPorToken, setRespostasPorToken] = useState<Map<string, RespostaDetalhe[]>>(new Map())
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const supabase = createClient()
@@ -986,6 +1018,110 @@ export default function HistoricoPage() {
       setParticipantes([])
     } finally {
       setLoadingParticipantes(false)
+    }
+  }
+
+  const buscarAvaliacaoTokens = async (treinamento: Treinamento) => {
+    if (!activeTenantId) return
+    setTreinamentoAvaliacao(treinamento)
+    setAvaliacaoDialogOpen(true)
+    setAvaliacaoTokens([])
+    setAvaliacaoSemFormulario(false)
+    setExpandedTokenId(null)
+    setRespostasPorToken(new Map())
+    setLoadingAvaliacao(true)
+    try {
+      const { data: formulario } = await supabase
+        .from('avaliacao_formularios')
+        .select('id')
+        .eq('treinamento_id', treinamento.id)
+        .eq('tenant_id', activeTenantId)
+        .maybeSingle()
+
+      if (!formulario) {
+        setAvaliacaoTokens([])
+        setAvaliacaoSemFormulario(true)
+        return
+      }
+
+      setAvaliacaoSemFormulario(false)
+      const { data: tokens } = await supabase
+        .from('avaliacao_tokens')
+        .select(
+          'id, respondente_nome, respondente_email, respondente_tipo, usado, nota, aprovado, respondido_em, token'
+        )
+        .eq('formulario_id', (formulario as { id: string }).id)
+        .eq('tenant_id', activeTenantId)
+        .order('respondido_em', { ascending: false })
+
+      setAvaliacaoTokens((tokens as AvaliacaoTokenRow[]) ?? [])
+    } catch (err) {
+      console.error('Erro ao buscar tokens de avaliação:', err)
+      toast.error('Não foi possível carregar as avaliações.')
+      setAvaliacaoTokens([])
+    } finally {
+      setLoadingAvaliacao(false)
+    }
+  }
+
+  const buscarRespostasToken = async (tokenId: string) => {
+    try {
+      const { data } = await supabase
+        .from('avaliacao_respostas')
+        .select(
+          `
+          opcao_selecionada,
+          avaliacao_perguntas(texto, tipo, resposta_correta)
+        `
+        )
+        .eq('token_id', tokenId)
+
+      const rows = (data ?? []) as unknown as {
+        opcao_selecionada: string | null
+        avaliacao_perguntas: { texto: string; tipo: string; resposta_correta: string | null } | { texto: string; tipo: string; resposta_correta: string | null }[] | null
+      }[]
+      const detalhes: RespostaDetalhe[] = rows.map((r) => {
+        const pergunta = Array.isArray(r.avaliacao_perguntas)
+          ? r.avaliacao_perguntas[0]
+          : r.avaliacao_perguntas
+        return {
+          pergunta_texto: pergunta?.texto ?? '',
+          tipo: pergunta?.tipo ?? '',
+          opcao_selecionada: r.opcao_selecionada,
+          resposta_correta: pergunta?.resposta_correta ?? null,
+        }
+      })
+
+      setRespostasPorToken((prev) => new Map(prev).set(tokenId, detalhes))
+    } catch (err) {
+      console.error('Erro ao buscar respostas:', err)
+      toast.error('Não foi possível carregar as respostas.')
+    }
+  }
+
+  const toggleExpandToken = (tokenId: string) => {
+    setExpandedTokenId((prev) => {
+      const next = prev === tokenId ? null : tokenId
+      if (next && !respostasPorToken.has(next)) {
+        buscarRespostasToken(next)
+      }
+      return next
+    })
+  }
+
+  const formatDateTime = (isoStr: string | null) => {
+    if (!isoStr) return '—'
+    try {
+      const d = new Date(isoStr)
+      return d.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    } catch {
+      return isoStr
     }
   }
 
@@ -1425,6 +1561,20 @@ export default function HistoricoPage() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              onClick={() => buscarAvaliacaoTokens(t)}
+                              className="gap-1"
+                            >
+                              <ClipboardCheck className="w-4 h-4" />
+                              Avaliação
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Ver Avaliações</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => buscarParticipantes(t)}
                               className="gap-1"
                               title="Ver Participantes"
@@ -1811,6 +1961,204 @@ export default function HistoricoPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setParticipantesDialogOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Avaliações */}
+      <Dialog
+        open={avaliacaoDialogOpen}
+        onOpenChange={(open) => {
+          setAvaliacaoDialogOpen(open)
+          if (!open) {
+            setTreinamentoAvaliacao(null)
+            setAvaliacaoTokens([])
+            setAvaliacaoSemFormulario(false)
+            setExpandedTokenId(null)
+            setRespostasPorToken(new Map())
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Avaliações — {treinamentoAvaliacao?.nome ?? ''}
+            </DialogTitle>
+            {treinamentoAvaliacao && (
+              <DialogDescription>
+                {treinamentoAvaliacao.codigo}
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          <div className="py-4">
+            {loadingAvaliacao ? (
+              <div className="space-y-3">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
+            ) : avaliacaoSemFormulario ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Nenhuma avaliação vinculada a este treinamento.
+              </p>
+            ) : avaliacaoTokens.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Nenhum participante com avaliação gerada ainda.
+              </p>
+            ) : (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      <TableHead className="font-medium w-8" />
+                      <TableHead className="font-medium">Nome</TableHead>
+                      <TableHead className="font-medium">E-mail</TableHead>
+                      <TableHead className="font-medium">Tipo</TableHead>
+                      <TableHead className="font-medium">Status</TableHead>
+                      <TableHead className="font-medium">Nota</TableHead>
+                      <TableHead className="font-medium">Respondido em</TableHead>
+                      <TableHead className="font-medium w-20">Detalhes</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {avaliacaoTokens.map((tok) => (
+                      <React.Fragment key={tok.id}>
+                        <TableRow>
+                          <TableCell className="w-8" />
+                          <TableCell className="font-medium">
+                            {tok.respondente_nome?.trim() || tok.respondente_email}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {tok.respondente_email}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="secondary"
+                              className={cn(
+                                (tok.respondente_tipo ?? '') === 'colaborador' &&
+                                  'bg-blue-500/10 text-blue-600 border-0',
+                                (tok.respondente_tipo ?? '') === 'parceiro' &&
+                                  'bg-muted text-muted-foreground border-0'
+                              )}
+                            >
+                              {(tok.respondente_tipo ?? 'parceiro') === 'colaborador'
+                                ? 'Colaborador'
+                                : 'Parceiro'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {!tok.usado ? (
+                              <Badge className="bg-amber-500/10 text-amber-600 border-0">
+                                Pendente
+                              </Badge>
+                            ) : tok.aprovado === true ? (
+                              <Badge className="bg-green-500/10 text-green-600 border-0">
+                                Aprovado
+                              </Badge>
+                            ) : tok.aprovado === false ? (
+                              <Badge className="bg-destructive/10 text-destructive border-0">
+                                Reprovado
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-muted text-muted-foreground border-0">
+                                Respondido
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {tok.nota != null ? `${tok.nota}%` : '—'}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {formatDateTime(tok.respondido_em)}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => toggleExpandToken(tok.id)}
+                              aria-label={
+                                expandedTokenId === tok.id ? 'Recolher' : 'Expandir'
+                              }
+                            >
+                              {expandedTokenId === tok.id ? (
+                                <ChevronUp className="w-4 h-4" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                        {expandedTokenId === tok.id && (
+                          <TableRow key={`${tok.id}-expanded`}>
+                            <TableCell
+                              colSpan={8}
+                              className="bg-muted/20 p-4 align-top"
+                            >
+                              {!respostasPorToken.has(tok.id) ? (
+                                <div className="flex items-center justify-center py-4">
+                                  <Skeleton className="h-6 w-32" />
+                                </div>
+                              ) : (
+                                <ul className="space-y-3">
+                                  {respostasPorToken
+                                    .get(tok.id)
+                                    ?.map((r, idx) => {
+                                      const resp = r.opcao_selecionada ?? '—'
+                                      const correta = r.resposta_correta
+                                      const isCorreta =
+                                        correta != null &&
+                                        resp !== '—' &&
+                                        resp === correta
+                                      const isErrada =
+                                        correta != null &&
+                                        resp !== '—' &&
+                                        resp !== correta
+                                      return (
+                                        <li key={idx} className="space-y-1">
+                                          <p className="font-semibold text-sm text-foreground">
+                                            {r.pergunta_texto}
+                                          </p>
+                                          <p
+                                            className={cn(
+                                              'text-sm',
+                                              isCorreta &&
+                                                'text-green-600 font-medium',
+                                              isErrada &&
+                                                'text-destructive font-medium',
+                                              !isCorreta &&
+                                                !isErrada &&
+                                                'text-muted-foreground'
+                                            )}
+                                          >
+                                            {isCorreta && '✓ '}
+                                            {isErrada && '✗ '}
+                                            Resposta: {resp}
+                                            {isErrada &&
+                                              correta &&
+                                              ` — Correta: ${correta}`}
+                                          </p>
+                                        </li>
+                                      )
+                                    }) ?? []}
+                                </ul>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAvaliacaoDialogOpen(false)}
+            >
               Fechar
             </Button>
           </DialogFooter>

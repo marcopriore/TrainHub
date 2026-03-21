@@ -3,11 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { GraduationCap, CheckCircle, XCircle, ArrowLeft } from 'lucide-react'
+import { GraduationCap, CheckCircle, XCircle, ArrowLeft, AlertTriangle } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Card,
   CardContent,
@@ -65,15 +64,7 @@ interface RespostaRow {
   valor_texto: string | null
 }
 
-const ESCALA_NUM_LABELS: Record<number, string> = {
-  1: '1 - Péssimo',
-  2: '2 - Ruim',
-  3: '3 - Regular',
-  4: '4 - Bom',
-  5: '5 - Excelente',
-}
-
-const ESCALA_QUAL_OPCOES = ['Ruim', 'Razoável', 'Bom', 'Excelente']
+const TIPOS_SUPORTADOS = ['multipla_escolha', 'verdadeiro_falso']
 
 export default function AvaliacaoTokenPage() {
   const params = useParams()
@@ -196,13 +187,14 @@ export default function AvaliacaoTokenPage() {
 
   const validate = (): boolean => {
     const next: Record<string, string> = {}
-    for (const p of perguntas) {
+    const perguntasValidas = perguntas.filter((p) => TIPOS_SUPORTADOS.includes(p.tipo))
+    for (const p of perguntasValidas) {
       if (!p.obrigatoria) continue
       const v = respostas[p.id]
       if (v === undefined || v === null || v === '') {
         next[p.id] = 'Esta pergunta é obrigatória.'
       } else if (
-        (p.tipo === 'dissertacao' || p.tipo === 'multipla_escolha') &&
+        p.tipo === 'multipla_escolha' &&
         typeof v === 'string' &&
         !v.trim()
       ) {
@@ -229,25 +221,22 @@ export default function AvaliacaoTokenPage() {
     const supabase = createClient()
     setSubmitting(true)
     try {
-      const perguntasComRespostaCorreta = perguntas.filter(
+      const perguntasSuportadas = perguntas.filter((p) => TIPOS_SUPORTADOS.includes(p.tipo))
+      const perguntasComRespostaCorreta = perguntasSuportadas.filter(
         (p) => p.resposta_correta != null && p.resposta_correta !== ''
       )
       let acertos = 0
       const totalComResposta = perguntasComRespostaCorreta.length
 
-      const rows = perguntas.map((p) => {
+      const rows = perguntasSuportadas.map((p) => {
         const valor = respostas[p.id]
         const tipo = p.tipo
         let opcaoSelecionada: string | null = null
         let valorNumerico: number | null = null
         let valorTexto: string | null = null
 
-        if (tipo === 'multipla_escolha' || tipo === 'verdadeiro_falso' || tipo === 'escala_qualitativa') {
+        if (tipo === 'multipla_escolha' || tipo === 'verdadeiro_falso') {
           opcaoSelecionada = typeof valor === 'string' ? valor : null
-        } else if (tipo === 'escala_numerica') {
-          valorNumerico = typeof valor === 'number' ? valor : null
-        } else if (tipo === 'dissertacao') {
-          valorTexto = typeof valor === 'string' ? valor : null
         }
 
         if (
@@ -471,7 +460,22 @@ export default function AvaliacaoTokenPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-8">
-            {perguntas.map((p) => (
+            {(state === 'formulario' || state === 'leitura') && (
+              <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-4 flex gap-3">
+                <AlertTriangle className="h-5 w-5 shrink-0 text-yellow-600" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-foreground">
+                    Atenção: esta avaliação só pode ser respondida uma única vez.
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Após o envio, não será possível alterar suas respostas.
+                  </p>
+                </div>
+              </div>
+            )}
+            {perguntas
+              .filter((p) => TIPOS_SUPORTADOS.includes(p.tipo))
+              .map((p) => (
               <div key={p.id} id={`pergunta-${p.id}`} className="space-y-3">
                 <Label className="text-base font-semibold">
                   {p.texto}
@@ -488,38 +492,25 @@ export default function AvaliacaoTokenPage() {
 
                 {state === 'leitura' ? (
                   <div className="text-muted-foreground pl-2">
-                    {p.tipo === 'dissertacao' && (
-                      <p className="whitespace-pre-wrap">
-                        {getRespostaDada(p.id) ?? '—'}
-                      </p>
-                    )}
-                    {(p.tipo === 'multipla_escolha' || p.tipo === 'verdadeiro_falso') && (
-                      <div className="space-y-1">
-                        <p
-                          className={cn(
-                            'font-medium',
-                            isRespostaCorreta(p, getRespostaDada(p.id))
-                              ? 'text-green-600'
-                              : isRespostaErrada(p, getRespostaDada(p.id))
-                                ? 'text-destructive'
-                                : ''
-                          )}
-                        >
-                          Resposta: {String(getRespostaDada(p.id) ?? '—')}
-                        </p>
-                        {p.resposta_correta && (
-                          <p className="text-sm text-green-600">
-                            Correta: {p.resposta_correta}
-                          </p>
+                    <div className="space-y-1">
+                      <p
+                        className={cn(
+                          'font-medium',
+                          isRespostaCorreta(p, getRespostaDada(p.id))
+                            ? 'text-green-600'
+                            : isRespostaErrada(p, getRespostaDada(p.id))
+                              ? 'text-destructive'
+                              : ''
                         )}
-                      </div>
-                    )}
-                    {p.tipo === 'escala_numerica' && (
-                      <p>Resposta: {getRespostaDada(p.id) ?? '—'}</p>
-                    )}
-                    {p.tipo === 'escala_qualitativa' && (
-                      <p>Resposta: {getRespostaDada(p.id) ?? '—'}</p>
-                    )}
+                      >
+                        Resposta: {String(getRespostaDada(p.id) ?? '—')}
+                      </p>
+                      {p.resposta_correta && (
+                        <p className="text-sm text-green-600">
+                          Correta: {p.resposta_correta}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -553,61 +544,6 @@ export default function AvaliacaoTokenPage() {
                         className="space-y-2"
                       >
                         {['Verdadeiro', 'Falso'].map((op) => (
-                          <div
-                            key={op}
-                            className="flex items-center space-x-2 rounded-lg border px-4 py-3 hover:bg-muted/50"
-                          >
-                            <RadioGroupItem value={op} id={`${p.id}-${op}`} />
-                            <Label
-                              htmlFor={`${p.id}-${op}`}
-                              className="flex-1 cursor-pointer font-normal"
-                            >
-                              {op}
-                            </Label>
-                          </div>
-                        ))}
-                      </RadioGroup>
-                    )}
-
-                    {p.tipo === 'dissertacao' && (
-                      <Textarea
-                        placeholder="Sua resposta..."
-                        value={(respostas[p.id] as string) ?? ''}
-                        onChange={(e) => handleRespostaChange(p.id, e.target.value)}
-                        className="min-h-[100px] resize-y"
-                      />
-                    )}
-
-                    {p.tipo === 'escala_numerica' && (
-                      <RadioGroup
-                        value={String(respostas[p.id] ?? '')}
-                        onValueChange={(v) => handleRespostaChange(p.id, Number(v) || 0)}
-                        className="flex flex-wrap gap-2"
-                      >
-                        {[1, 2, 3, 4, 5].map((n) => (
-                          <div
-                            key={n}
-                            className="flex items-center space-x-2 rounded-lg border px-3 py-2 hover:bg-muted/50"
-                          >
-                            <RadioGroupItem value={String(n)} id={`${p.id}-${n}`} />
-                            <Label
-                              htmlFor={`${p.id}-${n}`}
-                              className="cursor-pointer font-normal text-sm"
-                            >
-                              {ESCALA_NUM_LABELS[n]}
-                            </Label>
-                          </div>
-                        ))}
-                      </RadioGroup>
-                    )}
-
-                    {p.tipo === 'escala_qualitativa' && (
-                      <RadioGroup
-                        value={String(respostas[p.id] ?? '')}
-                        onValueChange={(v) => handleRespostaChange(p.id, v)}
-                        className="space-y-2"
-                      >
-                        {ESCALA_QUAL_OPCOES.map((op) => (
                           <div
                             key={op}
                             className="flex items-center space-x-2 rounded-lg border px-4 py-3 hover:bg-muted/50"
