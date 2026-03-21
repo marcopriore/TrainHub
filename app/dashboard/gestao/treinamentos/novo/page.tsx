@@ -555,6 +555,22 @@ function ParceiroForm({
           setLinksGerados([{ token, respondente_nome: null }])
           setLinksDialogOpen(true)
           abriuDialog = true
+          fetch('/api/pesquisa/enviar-emails', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              treinamento_id: novoTreinamentoId,
+              tenant_id: tenantId,
+              formulario_id: formularioSelecionado,
+            }),
+          })
+            .then(async (res) => {
+              const data = await res.json()
+              if (res.ok) {
+                toast.success(`E-mails da pesquisa enviados: ${data.enviados}`)
+              }
+            })
+            .catch(() => {})
         } catch (tokenErr) {
           console.error('Erro ao gerar link de pesquisa:', tokenErr)
           toast.error('Treinamento salvo, mas não foi possível gerar o link de pesquisa.')
@@ -1353,6 +1369,22 @@ function ColaboradorForm({
           }
           setLinksDialogOpen(true)
           abriuDialog = true
+          fetch('/api/pesquisa/enviar-emails', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              treinamento_id: novoTreinamentoId,
+              tenant_id: tenantId,
+              formulario_id: formularioSelecionado,
+            }),
+          })
+            .then(async (res) => {
+              const data = await res.json()
+              if (res.ok) {
+                toast.success(`E-mails da pesquisa enviados: ${data.enviados}`)
+              }
+            })
+            .catch(() => {})
         } catch (tokenErr) {
           console.error('Erro ao gerar links de pesquisa:', tokenErr)
           toast.error('Treinamento salvo, mas não foi possível gerar os links de pesquisa.')
