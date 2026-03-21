@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
@@ -29,13 +28,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -45,8 +37,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { cn } from '@/lib/utils'
-
 interface AvaliacaoFormulario {
   id: string
   tenant_id: string
@@ -59,14 +49,7 @@ interface AvaliacaoFormulario {
   treinamentos: { codigo: string; nome: string } | null
 }
 
-interface Treinamento {
-  id: string
-  codigo: string
-  nome: string
-}
-
 export default function AvaliacoesPage() {
-  const router = useRouter()
   const { user, getActiveTenantId } = useUser()
   const canManage =
     user?.isMaster?.() ||
@@ -76,14 +59,11 @@ export default function AvaliacoesPage() {
 
   const [formularios, setFormularios] = useState<AvaliacaoFormulario[]>([])
   const [perguntasCount, setPerguntasCount] = useState<Record<string, number>>({})
-  const [treinamentos, setTreinamentos] = useState<Treinamento[]>([])
-  const [treinamentosComAvaliacao, setTreinamentosComAvaliacao] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const [editSheetOpen, setEditSheetOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [editingFormulario, setEditingFormulario] = useState<AvaliacaoFormulario | null>(null)
   const [formularioToDelete, setFormularioToDelete] = useState<AvaliacaoFormulario | null>(null)
-  const [treinamentoId, setTreinamentoId] = useState('')
   const [titulo, setTitulo] = useState('')
   const [descricao, setDescricao] = useState('')
   const [notaMinima, setNotaMinima] = useState(70)
@@ -108,7 +88,6 @@ export default function AvaliacoesPage() {
       if (error) throw error
       const list = (data as unknown as AvaliacaoFormulario[]) ?? []
       setFormularios(list)
-      setTreinamentosComAvaliacao(new Set(list.map((f) => f.treinamento_id)))
 
       if (list.length === 0) {
         setPerguntasCount({})
@@ -134,72 +113,32 @@ export default function AvaliacoesPage() {
     }
   }
 
-  const fetchTreinamentos = async () => {
-    if (!activeTenantId) return
-    try {
-      const { data, error } = await supabase
-        .from('treinamentos')
-        .select('id, codigo, nome')
-        .eq('tenant_id', activeTenantId)
-        .order('codigo', { ascending: false })
-
-      if (error) throw error
-      setTreinamentos((data as Treinamento[]) ?? [])
-    } catch (error) {
-      console.error('Erro ao carregar treinamentos:', error)
-      toast.error('Não foi possível carregar treinamentos.')
-    }
-  }
-
   useEffect(() => {
     if (!activeTenantId || !user) return
     fetchFormularios()
-    fetchTreinamentos()
   }, [activeTenantId, user?.id])
-
-  const treinamentosSemAvaliacao = treinamentos.filter(
-    (t) => !treinamentosComAvaliacao.has(t.id) || (editingFormulario?.treinamento_id === t.id)
-  )
-
-  const openNewSheet = () => {
-    setEditingFormulario(null)
-    setTreinamentoId('')
-    setTitulo('')
-    setDescricao('')
-    setNotaMinima(70)
-    setSheetOpen(true)
-  }
 
   const openEditSheet = (f: AvaliacaoFormulario) => {
     setEditingFormulario(f)
-    setTreinamentoId(f.treinamento_id)
     setTitulo(f.titulo ?? '')
     setDescricao(f.descricao ?? '')
     setNotaMinima(f.nota_minima ?? 70)
-    setSheetOpen(true)
+    setEditSheetOpen(true)
   }
 
-  const closeSheet = () => {
-    setSheetOpen(false)
+  const closeEditSheet = () => {
+    setEditSheetOpen(false)
     setEditingFormulario(null)
-    setTreinamentoId('')
     setTitulo('')
     setDescricao('')
     setNotaMinima(70)
   }
 
-  const handleSave = async () => {
+  const handleSaveEdit = async () => {
+    if (!editingFormulario) return
     const tituloTrimmed = titulo.trim()
     if (!tituloTrimmed) {
       toast.error('Informe o título da avaliação.')
-      return
-    }
-    if (!activeTenantId) {
-      toast.error('Tenant não identificado.')
-      return
-    }
-    if (!editingFormulario && !treinamentoId) {
-      toast.error('Selecione o treinamento.')
       return
     }
 
@@ -211,29 +150,17 @@ export default function AvaliacoesPage() {
 
     setSubmitting(true)
     try {
-      const payload = {
-        titulo: tituloTrimmed,
-        descricao: descricao.trim() || null,
-        nota_minima: nota,
-      }
-      if (editingFormulario) {
-        const { error } = await supabase
-          .from('avaliacao_formularios')
-          .update(payload)
-          .eq('id', editingFormulario.id)
-        if (error) throw error
-        toast.success('Avaliação atualizada com sucesso.')
-      } else {
-        const { error } = await supabase.from('avaliacao_formularios').insert({
-          ...payload,
-          tenant_id: activeTenantId,
-          treinamento_id: treinamentoId,
-          ativo: true,
+      const { error } = await supabase
+        .from('avaliacao_formularios')
+        .update({
+          titulo: tituloTrimmed,
+          descricao: descricao.trim() || null,
+          nota_minima: nota,
         })
-        if (error) throw error
-        toast.success('Avaliação criada com sucesso.')
-      }
-      closeSheet()
+        .eq('id', editingFormulario.id)
+      if (error) throw error
+      toast.success('Avaliação atualizada com sucesso.')
+      closeEditSheet()
       fetchFormularios()
     } catch (error) {
       console.error('Erro ao salvar avaliação:', error)
@@ -304,12 +231,11 @@ export default function AvaliacoesPage() {
           <h1 className="font-serif text-2xl font-bold text-foreground">Avaliações</h1>
           <p className="text-muted-foreground text-sm mt-1">Formulários de Avaliação</p>
         </div>
-        <Button
-          onClick={openNewSheet}
-          className="w-full sm:w-auto shrink-0 bg-[#00C9A7] hover:bg-[#00C9A7]/90"
-        >
-          <Plus className="w-4 h-4" />
-          Nova Avaliação
+        <Button asChild className="w-full sm:w-auto shrink-0 bg-[#00C9A7] hover:bg-[#00C9A7]/90">
+          <Link href="/dashboard/gestao/avaliacoes/nova">
+            <Plus className="w-4 h-4" />
+            Nova Avaliação
+          </Link>
         </Button>
       </div>
 
@@ -389,44 +315,12 @@ export default function AvaliacoesPage() {
         )}
       </div>
 
-      <Sheet open={sheetOpen} onOpenChange={(o) => { setSheetOpen(o); if (!o) closeSheet() }}>
+      <Sheet open={editSheetOpen} onOpenChange={(o) => { setEditSheetOpen(o); if (!o) closeEditSheet() }}>
         <SheetContent side="right" className="sm:max-w-lg">
           <SheetHeader>
-            <SheetTitle className="font-serif">
-              {editingFormulario ? 'Editar Avaliação' : 'Nova Avaliação'}
-            </SheetTitle>
+            <SheetTitle className="font-serif">Editar Avaliação</SheetTitle>
           </SheetHeader>
           <div className="space-y-4 py-6">
-            <div className="space-y-2">
-              <Label htmlFor="av-treinamento">Treinamento *</Label>
-              <Select
-                value={treinamentoId}
-                onValueChange={setTreinamentoId}
-                disabled={!!editingFormulario}
-              >
-                <SelectTrigger id="av-treinamento">
-                  <SelectValue placeholder="Selecione o treinamento" />
-                </SelectTrigger>
-                <SelectContent>
-                  {treinamentosSemAvaliacao.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.codigo} — {t.nome}
-                    </SelectItem>
-                  ))}
-                  {treinamentosSemAvaliacao.length === 0 && editingFormulario && (
-                    <SelectItem value={editingFormulario.treinamento_id}>
-                      {editingFormulario.treinamentos?.codigo} —{' '}
-                      {editingFormulario.treinamentos?.nome}
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              {!editingFormulario && treinamentosSemAvaliacao.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Todos os treinamentos já possuem avaliação.
-                </p>
-              )}
-            </div>
             <div className="space-y-2">
               <Label htmlFor="av-titulo">Título *</Label>
               <Input
@@ -459,17 +353,10 @@ export default function AvaliacoesPage() {
             </div>
           </div>
           <SheetFooter>
-            <Button variant="outline" onClick={closeSheet} disabled={submitting}>
+            <Button variant="outline" onClick={closeEditSheet} disabled={submitting}>
               Cancelar
             </Button>
-            <Button
-              onClick={handleSave}
-              disabled={
-                submitting ||
-                (!editingFormulario && (!treinamentoId || treinamentosSemAvaliacao.length === 0))
-              }
-              className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
-            >
+            <Button onClick={handleSaveEdit} disabled={submitting} className="bg-[#00C9A7] hover:bg-[#00C9A7]/90">
               {submitting ? 'Salvando...' : 'Salvar'}
             </Button>
           </SheetFooter>
