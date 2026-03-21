@@ -541,18 +541,33 @@ function ParceiroForm({
       let abriuDialog = false
       if (usarPesquisa && formularioSelecionado) {
         try {
-          const token = crypto.randomUUID()
-          const { error: tokenError } = await supabase.from('pesquisa_tokens').insert({
-            tenant_id: tenantId,
-            treinamento_id: novoTreinamentoId,
-            formulario_id: formularioSelecionado,
-            token,
-            respondente_nome: null,
-            respondente_email: null,
-            respondente_tipo: 'parceiro',
-          })
+          const tokenRows =
+            parceiros.length > 0
+              ? parceiros.map((p) => ({
+                  tenant_id: tenantId,
+                  treinamento_id: novoTreinamentoId,
+                  formulario_id: formularioSelecionado,
+                  token: crypto.randomUUID(),
+                  respondente_nome: p.nome?.trim() || null,
+                  respondente_email: p.email?.trim() || null,
+                  respondente_tipo: 'parceiro' as const,
+                  usado: false,
+                }))
+              : [
+                  {
+                    tenant_id: tenantId,
+                    treinamento_id: novoTreinamentoId,
+                    formulario_id: formularioSelecionado,
+                    token: crypto.randomUUID(),
+                    respondente_nome: null,
+                    respondente_email: null,
+                    respondente_tipo: 'parceiro' as const,
+                    usado: false,
+                  },
+                ]
+          const { error: tokenError } = await supabase.from('pesquisa_tokens').insert(tokenRows)
           if (tokenError) throw tokenError
-          setLinksGerados([{ token, respondente_nome: null }])
+          setLinksGerados(tokenRows.map((r) => ({ token: r.token, respondente_nome: r.respondente_nome })))
           setLinksDialogOpen(true)
           abriuDialog = true
           fetch('/api/pesquisa/enviar-emails', {
@@ -1338,8 +1353,19 @@ function ColaboradorForm({
       if (usarPesquisa && formularioSelecionado) {
         try {
           if (colaboradorIds.length > 0) {
+            const { data: colaboradoresData } = await supabase
+              .from('colaboradores')
+              .select('id, nome, email')
+              .in('id', colaboradorIds)
+              .eq('tenant_id', tenantId)
+            const colaboradoresMap = new Map(
+              (colaboradoresData ?? []).map((c: { id: string; nome: string | null; email: string | null }) => [
+                c.id,
+                { nome: c.nome?.trim() || null, email: c.email?.trim() || null },
+              ])
+            )
             const tokenRows = colaboradorIds.map((colaboradorId) => {
-              const col = colaboradores.find((c) => c.id === colaboradorId)
+              const col = colaboradoresMap.get(colaboradorId)
               return {
                 tenant_id: tenantId,
                 treinamento_id: novoTreinamentoId,
@@ -1348,6 +1374,7 @@ function ColaboradorForm({
                 respondente_nome: col?.nome ?? null,
                 respondente_email: col?.email ?? null,
                 respondente_tipo: 'colaborador' as const,
+                usado: false,
               }
             })
             const { error: tokenError } = await supabase.from('pesquisa_tokens').insert(tokenRows)
@@ -1363,6 +1390,7 @@ function ColaboradorForm({
               respondente_nome: null,
               respondente_email: null,
               respondente_tipo: 'colaborador',
+              usado: false,
             })
             if (tokenError) throw tokenError
             setLinksGerados([{ token, respondente_nome: null }])
