@@ -54,10 +54,6 @@ const baseSchema = z.object({
     .number()
     .min(0, 'Valor entre 0 e 100')
     .max(100, 'Valor entre 0 e 100'),
-  indiceAprovacao: z.coerce
-    .number()
-    .min(0, 'Valor entre 0 e 100')
-    .max(100, 'Valor entre 0 e 100'),
 })
 
 const parceiroSchema = baseSchema
@@ -352,7 +348,6 @@ export default function NovoTreinamentoPage() {
                 quantidade_pessoas: 0,
                 data_treinamento: row.data_treinamento,
                 indice_satisfacao: row.indice_satisfacao,
-                indice_aprovacao: row.indice_aprovacao,
                 tenant_id: activeTenantId,
               })
               .select('id')
@@ -391,7 +386,6 @@ export default function NovoTreinamentoPage() {
                 empresa_parceira_id: row.empresa_parceira_id,
                 data_treinamento: row.data_treinamento,
                 indice_satisfacao: row.indice_satisfacao,
-                indice_aprovacao: row.indice_aprovacao,
                 tenant_id: activeTenantId,
               })
               .select('id')
@@ -524,7 +518,6 @@ function ParceiroForm({
           quantidade_pessoas: parceiros.length || 0,
           data_treinamento: data.dataTreinamento,
           indice_satisfacao: usarPesquisa ? null : data.indiceSatisfacao,
-          indice_aprovacao: data.indiceAprovacao,
           tenant_id: tenantId,
         })
         .select('id')
@@ -759,21 +752,6 @@ function ParceiroForm({
                 </span>
               </div>
             </FormField>
-            <FormField label="Índice de Aprovação (%)" error={errors.indiceAprovacao?.message}>
-              <div className="relative">
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  placeholder="0"
-                  className="pr-8"
-                  {...register('indiceAprovacao')}
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-                  %
-                </span>
-              </div>
-            </FormField>
           </div>
         )}
         {modoSatisfacao === 'pesquisa' && (
@@ -805,24 +783,6 @@ function ParceiroForm({
                 </Select>
               </FormField>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div />
-              <FormField label="Índice de Aprovação (%)" error={errors.indiceAprovacao?.message}>
-                <div className="relative">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    placeholder="0"
-                    className="pr-8"
-                    {...register('indiceAprovacao')}
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-                    %
-                  </span>
-                </div>
-              </FormField>
-            </div>
           </div>
         )}
       </div>
@@ -1318,7 +1278,6 @@ function ColaboradorForm({
           quantidade_pessoas: null,
           data_treinamento: data.dataTreinamento,
           indice_satisfacao: usarPesquisa ? null : data.indiceSatisfacao,
-          indice_aprovacao: data.indiceAprovacao,
           tenant_id: tenantId,
         })
         .select('id')
@@ -1596,21 +1555,6 @@ function ColaboradorForm({
                 </span>
               </div>
             </FormField>
-            <FormField label="Índice de Aprovação (%)" error={errors.indiceAprovacao?.message}>
-              <div className="relative">
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  placeholder="0"
-                  className="pr-8"
-                  {...register('indiceAprovacao')}
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-                  %
-                </span>
-              </div>
-            </FormField>
           </div>
         )}
         {modoSatisfacao === 'pesquisa' && (
@@ -1642,24 +1586,6 @@ function ColaboradorForm({
                 </Select>
               </FormField>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div />
-              <FormField label="Índice de Aprovação (%)" error={errors.indiceAprovacao?.message}>
-                <div className="relative">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    placeholder="0"
-                    className="pr-8"
-                    {...register('indiceAprovacao')}
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-                    %
-                  </span>
-                </div>
-              </FormField>
-            </div>
           </div>
         )}
       </div>

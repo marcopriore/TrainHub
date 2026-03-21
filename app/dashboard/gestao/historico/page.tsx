@@ -1266,7 +1266,6 @@ export default function HistoricoPage() {
         empresa_parceira_id,
         data_treinamento,
         indice_satisfacao,
-        indice_aprovacao,
         tenant_id,
         empresas_parceiras(nome)
       `
@@ -1334,16 +1333,54 @@ export default function HistoricoPage() {
         font: { bold: true, color: { rgb: 'FFFFFF' } },
       }
 
-      const rows = data.map((t) => [
-        t.codigo,
-        tipoLabel[t.tipo] ?? t.tipo,
-        t.nome,
-        t.empresas_parceiras?.nome ?? '—',
-        t.carga_horaria,
-        formatDate(t.data_treinamento),
-        t.indice_satisfacao != null ? `${t.indice_satisfacao}%` : '—',
-        t.indice_aprovacao != null ? `${t.indice_aprovacao}%` : '—',
-      ])
+      const treinamentoIdsExport = data.map((t) => t.id)
+      let mediasExport = new Map<string, number>()
+      let comAvaliacaoExport = new Set<string>()
+      if (treinamentoIdsExport.length > 0) {
+        const { data: mediasAvaliacao } = await supabase
+          .from('avaliacao_tokens')
+          .select('treinamento_id, nota')
+          .eq('tenant_id', activeTenantId)
+          .eq('usado', true)
+          .in('treinamento_id', treinamentoIdsExport)
+          .not('nota', 'is', null)
+        const { data: avaliacoesVinculadas } = await supabase
+          .from('avaliacao_formularios')
+          .select('treinamento_id')
+          .eq('tenant_id', activeTenantId)
+          .in('treinamento_id', treinamentoIdsExport)
+        if (mediasAvaliacao) {
+          const grupos = new Map<string, number[]>()
+          for (const row of mediasAvaliacao as { treinamento_id: string; nota: number }[]) {
+            if (!grupos.has(row.treinamento_id)) grupos.set(row.treinamento_id, [])
+            grupos.get(row.treinamento_id)!.push(row.nota)
+          }
+          for (const [id, notas] of grupos) {
+            mediasExport.set(id, Math.round(notas.reduce((a, b) => a + b, 0) / notas.length))
+          }
+        }
+        comAvaliacaoExport = new Set(
+          (avaliacoesVinculadas as { treinamento_id: string }[] | null)?.map((a) => a.treinamento_id) ?? []
+        )
+      }
+
+      const rows = data.map((t) => {
+        const media = mediasExport.get(t.id)
+        const temAvaliacao = comAvaliacaoExport.has(t.id)
+        let avaliacaoVal = '—'
+        if (!temAvaliacao) avaliacaoVal = 'N/A'
+        else if (media !== undefined) avaliacaoVal = `${media}%`
+        return [
+          t.codigo,
+          tipoLabel[t.tipo] ?? t.tipo,
+          t.nome,
+          t.empresas_parceiras?.nome ?? '—',
+          t.carga_horaria,
+          formatDate(t.data_treinamento),
+          t.indice_satisfacao != null ? `${t.indice_satisfacao}%` : '—',
+          avaliacaoVal,
+        ]
+      })
 
       const aoa = [
         [
@@ -1354,7 +1391,7 @@ export default function HistoricoPage() {
           { v: 'Carga Horária (h)', t: 's', s: headerStyle },
           { v: 'Data', t: 's', s: headerStyle },
           { v: 'Satisfação (%)', t: 's', s: headerStyle },
-          { v: 'Aprovação (%)', t: 's', s: headerStyle },
+          { v: 'Avaliação (%)', t: 's', s: headerStyle },
         ],
         ...rows.map((r) => r.map((v) => ({ v, t: 's' as const }))),
       ]
@@ -1599,7 +1636,6 @@ export default function HistoricoPage() {
                 <TableHead className="font-medium">Data</TableHead>
                 <TableHead className="font-medium">Satisfação</TableHead>
                 <TableHead className="font-medium">Avaliação</TableHead>
-                <TableHead className="font-medium">Aprovação</TableHead>
                 <TableHead className="font-medium w-[140px]">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -1669,15 +1705,6 @@ export default function HistoricoPage() {
                         </span>
                       )
                     })()}
-                  </TableCell>
-                  <TableCell>
-                    {t.indice_aprovacao != null ? (
-                      <span className="text-green-600 font-medium">
-                        {t.indice_aprovacao}%
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
