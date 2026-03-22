@@ -11,7 +11,7 @@
 - **Branch principal:** `main` (produção) | `master` (desenvolvimento)
 - **Deploy produção:** https://trainhub-app.vercel.app
 - **Vercel project:** trainhub-app
-- **Versão atual:** v2.17.4
+- **Versão atual:** v2.20.1
 
 ---
 
@@ -36,6 +36,8 @@
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
+RESEND_API_KEY=...
+NEXT_PUBLIC_APP_URL=...
 ```
 
 ### Vercel (produção)
@@ -116,6 +118,16 @@ pesquisa_tokens: id, tenant_id, treinamento_id, formulario_id, respondente_nome,
 pesquisa_respostas: id, token_id, pergunta_id, tenant_id, valor_numerico,
                     valor_texto, opcao_selecionada, criado_em
                     UNIQUE(token_id, pergunta_id)
+
+-- Avaliações
+avaliacao_formularios: id, tenant_id, treinamento_id, titulo, descricao, nota_minima, ativo, criado_em, atualizado_em
+avaliacao_perguntas: id, formulario_id, texto, tipo, opcoes, resposta_correta, obrigatoria, ordem, criado_em
+avaliacao_tokens: id, tenant_id, formulario_id, treinamento_id, respondente_nome, respondente_email,
+                 respondente_tipo, token, usado, nota, aprovado, respondido_em, criado_em
+avaliacao_respostas: id, token_id, pergunta_id, valor_numerico, valor_texto, opcao_selecionada, criado_em
+
+-- Participantes Parceiros
+treinamento_parceiros: id, tenant_id, treinamento_id, nome, email, criado_em
 ```
 
 ### Funções SQL
@@ -146,7 +158,7 @@ update_atualizado_em() → TRIGGER    -- atualiza coluna atualizado_em
 - Site URL: `https://trainhub-app.vercel.app`
 
 ### Rotas públicas (middleware.ts)
-`/login`, `/auth/callback`, `/sem-acesso`, `/auth/reset-password`, `/pesquisa`, `/api/pesquisa`
+`/login`, `/auth/callback`, `/sem-acesso`, `/auth/reset-password`, `/pesquisa`, `/avaliacao`, `/api/pesquisa`
 
 ---
 
@@ -232,6 +244,7 @@ app/
 ├── auth/reset-password/page.tsx                # Redefinição de senha → /dashboard
 ├── sem-acesso/page.tsx                         # Página de acesso negado
 ├── pesquisa/[token]/page.tsx                   # Página PÚBLICA de resposta de pesquisa
+├── avaliacao/[token]/page.tsx                  # Página PÚBLICA de resposta de avaliação
 │
 ├── dashboard/
 │   ├── layout.tsx                              # Layout mínimo SEM sidebar
@@ -269,9 +282,12 @@ app/
     │   ├── criar-usuario/route.ts
     │   ├── deletar-usuario/route.ts
     │   └── resetar-senha/route.ts
-    └── pesquisa/
-        ├── calcular-satisfacao/route.ts        # Calcula média e atualiza indice_satisfacao
-        └── notificacoes/route.ts               # Dispara notificações aos colaboradores
+    ├── pesquisa/
+    │   ├── calcular-satisfacao/route.ts        # Calcula média e atualiza indice_satisfacao
+    │   ├── enviar-emails/route.ts              # Disparo de e-mails da pesquisa via Resend
+    │   └── notificacoes/route.ts               # Dispara notificações aos colaboradores
+    └── avaliacao/
+        └── disparar/route.ts                   # Disparo de e-mails de avaliação via Resend
 ```
 
 ---
@@ -485,6 +501,21 @@ Módulo: Trilhas de Conhecimento (BookOpen, azul)
 | v2.17.2 | Fix: data com timezone e modal pesquisa sem duplicar registro |
 | v2.17.3 | Fix: datas sem offset timezone em todas as telas |
 | v2.17.4 | Fix: race condition no carregamento de módulos ao dar F5 |
+| v2.18.0 | Importação de planilha com wizard 3 etapas nas abas Parceiro e Colaborador |
+| v2.18.1 | Layout: campos Carga Horária, Data e Empresa em linha no formulário |
+| v2.18.2 | Importação em massa: aba Participantes com índice numérico |
+| v2.18.3 | Histórico: botão Ver Participantes com Dialog e filtro por nome |
+| v2.18.4 | Histórico: paginação 20 registros e exportação Excel com filtros |
+| v2.19.0 | Módulo Avaliações: dashboard colaborador, gestão de formulários e perguntas |
+| v2.19.1 | Avaliações: tela de criação com dialog de perguntas |
+| v2.19.2 | Avaliações: tela pública de resposta com cálculo de nota e resultado |
+| v2.19.3 | Avaliações: tipos simplificados, aviso único envio e listagem no histórico |
+| v2.19.4 | Avaliações: disparo de e-mails via Resend com geração de tokens |
+| v2.19.5 | Fix: contagem correta de e-mails enviados no disparo |
+| v2.19.6 | Fix: sem modo leitura após resposta e coluna Avaliação no histórico |
+| v2.19.7 | Histórico: coluna Avaliação substitui Aprovação; formulários sem índice aprovação |
+| v2.20.0 | Pesquisa: disparo automático de e-mail via Resend ao salvar Via Pesquisa |
+| v2.20.1 | Fix: pesquisa_tokens com respondente_nome e email preenchidos corretamente |
 
 ---
 
@@ -506,15 +537,18 @@ git push origin vX.Y.Z
 ### 🔴 Bugs conhecidos
 - Nenhum bug crítico pendente
 
+### Serviço de e-mail
+- **Resend** (RESEND_API_KEY) para disparo de avaliações e pesquisas de satisfação
+
 ### 🟡 Melhorias planejadas
-- [ ] Notificações por e-mail (Resend ou SendGrid)
 - [ ] Tela de perfil do usuário: editar nome e foto
 - [ ] Aplicar permissão `importar_planilha` na tela de importação do histórico
 - [ ] Campo "Respondente" na tela de pesquisas/[id] exibe ID truncado — melhorar para mostrar nome
 - [ ] Validação de formulário mais robusta no registro de treinamento (modo Via Pesquisa)
 - [ ] Conectar botão Baixar certificado com dados reais quando vier do Catálogo
-- [ ] Módulo Avaliações e Certificados completo
+- [ ] Fluxo de reenvio individual de avaliação por participante
 - [ ] Trilhas de Conhecimento estruturadas
+- [ ] Catálogo de Treinamentos completo para colaboradores
 
 ### 🟢 Funcionando 100%
 - [x] Multi-tenant com RLS completo
@@ -538,6 +572,8 @@ git push origin vX.Y.Z
 - [x] Pesquisas de satisfação com formulário próprio
 - [x] Página pública de resposta /pesquisa/[token]
 - [x] Cálculo automático do índice de satisfação
+- [x] Notificações/disparo por e-mail (Resend implementado)
+- [x] Módulo Avaliações
 - [x] Código identificador de treinamento (TH0001NC)
 - [x] Tela de respostas de pesquisa
 - [x] Alteração de senha no perfil

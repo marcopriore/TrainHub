@@ -16,6 +16,7 @@ import {
   Check,
   Users,
   LogOut,
+  Building2,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -121,8 +122,10 @@ function generateTempPassword(length = 8): string {
 const COR_USUARIOS = '#3b82f6'
 
 export default function UsuariosPage() {
-  const { user, loading: userLoading, getActiveTenantId } = useUser()
+  const { user, loading: userLoading, getActiveTenantId, selectedTenant } = useUser()
   const activeTenantId = getActiveTenantId()
+  const nomeTenantAtivo =
+    selectedTenant?.nome ?? user?.tenant?.nome ?? selectedTenant?.slug ?? user?.tenant?.slug ?? activeTenantId ?? '—'
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [perfis, setPerfis] = useState<Perfil[]>([])
   const [loading, setLoading] = useState(true)
@@ -199,7 +202,8 @@ export default function UsuariosPage() {
   }, [activeTenantId])
 
   const onAddUser = async (data: AddUserFormData) => {
-    if (!activeTenantId) return
+    const tenantId = getActiveTenantId()
+    if (!tenantId) return
     try {
       const senha = generateTempPassword()
       const response = await fetch('/api/admin/criar-usuario', {
@@ -209,7 +213,7 @@ export default function UsuariosPage() {
           nome: data.nome,
           email: data.email,
           senha,
-          tenant_id: activeTenantId,
+          tenant_id: tenantId,
           perfil_id: data.perfil_id,
         }),
       })
@@ -374,7 +378,8 @@ export default function UsuariosPage() {
 
   const handleConfirmImport = async () => {
     const toImport = validatedRows.filter((r) => r.valid)
-    if (toImport.length === 0 || !activeTenantId) return
+    const tenantId = getActiveTenantId()
+    if (toImport.length === 0 || !tenantId) return
 
     setImporting(true)
     setImportStep(3)
@@ -394,7 +399,7 @@ export default function UsuariosPage() {
             nome: row.nome,
             email: row.email,
             senha,
-            tenant_id: activeTenantId,
+            tenant_id: tenantId,
             perfil_id: row.perfilId,
           }),
         })
@@ -669,6 +674,11 @@ export default function UsuariosPage() {
             <DialogHeader>
               <DialogTitle>Adicionar usuário</DialogTitle>
             </DialogHeader>
+            <div className="flex items-center gap-2 bg-muted rounded-md px-3 py-2 text-sm">
+              <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Criando usuário para o tenant:</span>
+              <span className="font-semibold text-foreground">{nomeTenantAtivo}</span>
+            </div>
             {tempPassword && (
               <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-sm">
                 <p className="font-medium text-amber-700 dark:text-amber-400">
