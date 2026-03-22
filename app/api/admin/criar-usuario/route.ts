@@ -24,6 +24,20 @@ export async function POST(request: NextRequest) {
   })
 
   if (authError) {
+    const msg = authError.message?.toLowerCase() ?? ''
+    if (
+      msg.includes('already been registered') ||
+      msg.includes('user already registered') ||
+      msg.includes('already registered')
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'Este e-mail já está cadastrado em outro tenant. Cada e-mail só pode pertencer a um tenant no TrainHub.',
+        },
+        { status: 409 }
+      )
+    }
     return NextResponse.json({ error: authError.message }, { status: 400 })
   }
 

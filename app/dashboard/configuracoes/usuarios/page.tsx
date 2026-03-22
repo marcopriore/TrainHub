@@ -219,7 +219,10 @@ export default function UsuariosPage() {
       })
 
       const result = await response.json()
-      if (!response.ok) throw new Error(result.error ?? 'Erro ao criar usuário')
+      if (!response.ok) {
+        toast.error(result?.error ?? 'Erro ao criar usuário')
+        return
+      }
 
       setTempPassword(senha)
       toast.success('Usuário criado. Anote a senha temporária.')
@@ -540,8 +543,10 @@ export default function UsuariosPage() {
           <div className="flex flex-col gap-6">
             <div>
               <h1 className="font-serif text-2xl font-bold text-foreground">Usuários</h1>
-              <p className="text-muted-foreground text-sm mt-1">
-                Gerencie os usuários do tenant
+              <p className="text-muted-foreground text-sm mt-1 flex items-center gap-2">
+                <Building2 className="w-4 h-4 shrink-0" />
+                Gerenciando usuários de:{' '}
+                <span className="font-semibold text-foreground">{nomeTenantAtivo}</span>
               </p>
             </div>
 
