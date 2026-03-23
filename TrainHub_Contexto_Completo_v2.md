@@ -79,7 +79,7 @@ categorias: id, tenant_id, nome, criado_em, UNIQUE(tenant_id, nome)
 -- Treinamentos realizados (histórico)
 treinamentos: id, tenant_id, tipo, nome, conteudo, objetivo, carga_horaria,
               empresa_parceira_id, quantidade_pessoas, data_treinamento,
-              indice_satisfacao, indice_aprovacao, arquivo_url, criado_em,
+              indice_satisfacao, arquivo_url, criado_em,
               codigo (TEXT UNIQUE gerado por trigger trigger_gerar_codigo_treinamento no formato TH0001NC)
 treinamento_colaboradores: id, tenant_id, treinamento_id (CASCADE), colaborador_id, criado_em
 

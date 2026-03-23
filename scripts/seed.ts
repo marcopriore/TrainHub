@@ -236,7 +236,6 @@ async function run() {
       quantidade_pessoas: 0,
       data_treinamento: '',
       indice_satisfacao: 0,
-      indice_aprovacao: 0,
       tenant_id: tenantId,
     }
 
@@ -250,7 +249,6 @@ async function run() {
         quantidade_pessoas: 15,
         data_treinamento: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
         indice_satisfacao: 92,
-        indice_aprovacao: 95,
         empresa_parceira_id: empresaTi.id,
         tenant_id: tenantId,
       },
@@ -264,7 +262,6 @@ async function run() {
         quantidade_pessoas: 20,
         data_treinamento: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
         indice_satisfacao: 88,
-        indice_aprovacao: 90,
         tenant_id: tenantId,
       },
     ]
@@ -303,7 +300,6 @@ async function run() {
           empresa_parceira_id: empresaTi.id,
           data_treinamento: new Date().toISOString().slice(0, 10),
           indice_satisfacao: 85,
-          indice_aprovacao: 88,
           tenant_id: tenantId,
         }
         const { data: trColab, error: trColabErr } = await supabase

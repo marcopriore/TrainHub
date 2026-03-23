@@ -11,7 +11,6 @@ export interface RecentActivityItem {
   cargaHoraria: number
   data: string
   indiceSatisfacao: number | null
-  indiceAprovacao: number | null
 }
 
 const tipoConfig: Record<string, string> = {
@@ -71,9 +70,6 @@ export function RecentActivityTable({
                 <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide whitespace-nowrap">
                   Satisfação
                 </th>
-                <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide whitespace-nowrap">
-                  Aprovação
-                </th>
               </tr>
             </thead>
             <tbody>
@@ -111,15 +107,6 @@ export function RecentActivityTable({
                     {item.indiceSatisfacao != null ? (
                       <span className="text-amber-600 font-medium">
                         {item.indiceSatisfacao}%
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-3.5">
-                    {item.indiceAprovacao != null ? (
-                      <span className="text-green-600 font-medium">
-                        {item.indiceAprovacao}%
                       </span>
                     ) : (
                       <span className="text-muted-foreground">—</span>

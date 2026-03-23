@@ -1,6 +1,6 @@
 'use client'
 
-import { Handshake, Users, Star, CheckCircle } from 'lucide-react'
+import { Handshake, Users, Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -92,7 +92,6 @@ export interface KpiData {
   totalHorasParceiros: number
   totalHorasColaboradores: number
   indiceSatisfacao: number | null
-  indiceAprovacao: number | null
 }
 
 export function KpiCards({
@@ -105,7 +104,7 @@ export function KpiCards({
   if (loading) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {[1, 2, 3, 4].map((i) => (
+        {[1, 2, 3].map((i) => (
           <Skeleton key={i} className="h-24 rounded-xl" />
         ))}
       </div>
@@ -113,10 +112,9 @@ export function KpiCards({
   }
 
   const satisfacao = data?.indiceSatisfacao ?? 0
-  const aprovacao = data?.indiceAprovacao ?? 0
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
       <KpiCard
         title="Total de Horas — Parceiros"
         value={data?.totalHorasParceiros?.toLocaleString('pt-BR') ?? '0'}
@@ -138,15 +136,6 @@ export function KpiCards({
         color="amber"
         isPercent
         progress={satisfacao}
-      />
-      <KpiCard
-        title="Índice de Aprovação"
-        value={aprovacao > 0 ? aprovacao.toFixed(1) : '—'}
-        subtitle="média das provas"
-        icon={<CheckCircle className="w-6 h-6" />}
-        color="green"
-        isPercent
-        progress={aprovacao}
       />
     </div>
   )

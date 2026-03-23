@@ -7,7 +7,6 @@ import {
   Trash2,
   Pencil,
   Star,
-  CheckCircle,
   Calendar,
   Clock,
   Users,
@@ -94,7 +93,6 @@ interface Treinamento {
   quantidade_pessoas: number | null
   data_treinamento: string
   indice_satisfacao: number | null
-  indice_aprovacao: number | null
   criado_em: string
   tenant_id: string | null
   empresas_parceiras: { nome: string } | null
@@ -165,10 +163,6 @@ const editBaseSchema = z.object({
   empresaParceiraId: z.string().min(1, 'Selecione a empresa parceira'),
   dataTreinamento: z.string().min(1, 'Selecione a data do treinamento'),
   indiceSatisfacao: z.coerce
-    .number()
-    .min(0, 'Valor entre 0 e 100')
-    .max(100, 'Valor entre 0 e 100'),
-  indiceAprovacao: z.coerce
     .number()
     .min(0, 'Valor entre 0 e 100')
     .max(100, 'Valor entre 0 e 100'),
@@ -245,7 +239,6 @@ function EditTreinamentoForm({
         empresaParceiraId: treinamento.empresa_parceira_id ?? '',
         dataTreinamento: treinamento.data_treinamento,
         indiceSatisfacao: treinamento.indice_satisfacao ?? 0,
-        indiceAprovacao: treinamento.indice_aprovacao ?? 0,
         quantidadePessoas: treinamento.quantidade_pessoas ?? undefined,
         colaboradores: defaultColaboradores,
       },
@@ -305,12 +298,6 @@ function EditTreinamentoForm({
       hasError = true
     }
 
-    const indiceAprovacao = Number(values.indiceAprovacao)
-    if (isNaN(indiceAprovacao) || indiceAprovacao < 0 || indiceAprovacao > 100) {
-      setError('indiceAprovacao', { message: 'Valor entre 0 e 100' })
-      hasError = true
-    }
-
     if (values.tipo === 'parceiro') {
       const qtd = Number(values.quantidadePessoas)
       if (isNaN(qtd) || qtd < 1) {
@@ -343,7 +330,6 @@ function EditTreinamentoForm({
         empresa_parceira_id: values.empresaParceiraId,
         data_treinamento: values.dataTreinamento,
         indice_satisfacao: indiceSatisfacao,
-        indice_aprovacao: indiceAprovacao,
       }
       if (values.tipo === 'parceiro') {
         updatePayload.quantidade_pessoas = Math.max(1, Number(values.quantidadePessoas) || 1)
@@ -494,20 +480,12 @@ function EditTreinamentoForm({
         </FormFieldEdit>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <FormFieldEdit label="Índice de Satisfação %" error={errors.indiceSatisfacao?.message}>
-          <div className="relative">
-            <Input type="number" min={0} max={100} className="pr-8" {...register('indiceSatisfacao')} />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
-          </div>
-        </FormFieldEdit>
-        <FormFieldEdit label="Índice de Aprovação %" error={errors.indiceAprovacao?.message}>
-          <div className="relative">
-            <Input type="number" min={0} max={100} className="pr-8" {...register('indiceAprovacao')} />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
-          </div>
-        </FormFieldEdit>
-      </div>
+      <FormFieldEdit label="Índice de Satisfação %" error={errors.indiceSatisfacao?.message}>
+        <div className="relative">
+          <Input type="number" min={0} max={100} className="pr-8 w-full max-w-[160px]" {...register('indiceSatisfacao')} />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+        </div>
+      </FormFieldEdit>
 
       {tipo === 'colaborador' && (
         <div className="space-y-3">
@@ -652,7 +630,6 @@ export default function HistoricoPage() {
         quantidade_pessoas,
         data_treinamento,
         indice_satisfacao,
-        indice_aprovacao,
         criado_em,
         tenant_id,
         empresas_parceiras(nome)
@@ -1904,7 +1881,7 @@ export default function HistoricoPage() {
                     Indicadores
                   </h3>
                   <Separator />
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3">
                     <div
                       className={cn(
                         'rounded-xl p-5 border relative',
@@ -1920,24 +1897,6 @@ export default function HistoricoPage() {
                       <span className="text-4xl font-bold block">
                         {selectedTreinamento.indice_satisfacao != null
                           ? `${selectedTreinamento.indice_satisfacao}%`
-                          : '—'}
-                      </span>
-                    </div>
-                    <div
-                      className={cn(
-                        'rounded-xl p-5 border relative',
-                        getIndicadorColor(selectedTreinamento.indice_aprovacao)
-                      )}
-                    >
-                      <div className="absolute top-4 right-4">
-                        <CheckCircle className="w-4 h-4 shrink-0 opacity-80" />
-                      </div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground/80 mb-1">
-                        Índice de Aprovação
-                      </p>
-                      <span className="text-4xl font-bold block">
-                        {selectedTreinamento.indice_aprovacao != null
-                          ? `${selectedTreinamento.indice_aprovacao}%`
                           : '—'}
                       </span>
                     </div>

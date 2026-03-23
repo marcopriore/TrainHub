@@ -38,7 +38,6 @@ interface TreinamentoRow {
   carga_horaria: number
   data_treinamento: string
   indice_satisfacao: number | null
-  indice_aprovacao: number | null
   criado_em: string
   empresas_parceiras: { nome: string } | null
 }
@@ -81,20 +80,10 @@ function processarDados(treinamentos: TreinamentoRow[]) {
         comSatisfacao.length
       : null
 
-  const comAprovacao = treinamentos.filter(
-    (t) => t.indice_aprovacao != null && t.indice_aprovacao > 0
-  )
-  const indiceAprovacao =
-    comAprovacao.length > 0
-      ? comAprovacao.reduce((a, t) => a + (t.indice_aprovacao ?? 0), 0) /
-        comAprovacao.length
-      : null
-
   const kpiData: KpiData = {
     totalHorasParceiros,
     totalHorasColaboradores,
     indiceSatisfacao: indiceSatisfacao != null ? Number(indiceSatisfacao.toFixed(1)) : null,
-    indiceAprovacao: indiceAprovacao != null ? Number(indiceAprovacao.toFixed(1)) : null,
   }
 
   const ultimos6Meses = getUltimos6Meses()
@@ -130,7 +119,6 @@ function processarDados(treinamentos: TreinamentoRow[]) {
       cargaHoraria: t.carga_horaria ?? 0,
       data: t.data_treinamento,
       indiceSatisfacao: t.indice_satisfacao,
-      indiceAprovacao: t.indice_aprovacao,
     }))
 
   return { kpiData, barData, donutData, recentes }
@@ -163,7 +151,7 @@ export default function DashboardPage() {
         if (user?.isMaster?.() || user?.isAdmin?.()) {
           const { data, error } = await supabase
             .from('treinamentos')
-            .select('id, tipo, nome, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, criado_em, empresas_parceiras(nome)')
+            .select('id, tipo, nome, carga_horaria, data_treinamento, indice_satisfacao, criado_em, empresas_parceiras(nome)')
             .eq('tenant_id', activeTenantId)
             .order('criado_em', { ascending: false })
 
@@ -229,7 +217,7 @@ export default function DashboardPage() {
 
         const { data, error } = await supabase
           .from('treinamentos')
-          .select('id, tipo, nome, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, criado_em, empresas_parceiras(nome)')
+          .select('id, tipo, nome, carga_horaria, data_treinamento, indice_satisfacao, criado_em, empresas_parceiras(nome)')
           .in('id', ids)
           .order('criado_em', { ascending: false })
 

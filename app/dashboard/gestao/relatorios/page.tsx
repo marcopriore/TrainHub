@@ -60,7 +60,6 @@ const MESES_PT = [
 const COR_PARCEIRO = '#3b82f6'
 const COR_COLABORADOR = '#00C9A7'
 const COR_SATISFACAO = '#f59e0b'
-const COR_APROVACAO = '#22c55e'
 
 interface Treinamento {
   id: string
@@ -69,7 +68,6 @@ interface Treinamento {
   carga_horaria: number
   data_treinamento: string
   indice_satisfacao: number | null
-  indice_aprovacao: number | null
   empresa_parceira_id: string | null
   empresas_parceiras: { nome: string } | null
 }
@@ -77,7 +75,7 @@ interface Treinamento {
 interface TreinamentoColaboradorRow {
   treinamento_id: string
   colaborador_id: string
-  treinamentos: { carga_horaria: number; data_treinamento: string; indice_satisfacao: number | null; indice_aprovacao: number | null }
+  treinamentos: { carga_horaria: number; data_treinamento: string; indice_satisfacao: number | null }
   colaboradores: { nome: string; setor_id: string | null; setores: { nome: string } | null }
 }
 
@@ -208,7 +206,7 @@ export default function RelatoriosPage() {
       if (user?.isMaster() || user?.isAdmin?.()) {
         let query = supabase
           .from('treinamentos')
-          .select('id, codigo, tipo, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, empresa_parceira_id, empresas_parceiras(nome)')
+          .select('id, codigo, tipo, carga_horaria, data_treinamento, indice_satisfacao, empresa_parceira_id, empresas_parceiras(nome)')
           .eq('tenant_id', activeTenantId)
           .gte('data_treinamento', appliedFilters.dataInicio)
           .lte('data_treinamento', appliedFilters.dataFim)
@@ -234,7 +232,7 @@ export default function RelatoriosPage() {
           .select(`
             treinamento_id,
             colaborador_id,
-            treinamentos(carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao),
+            treinamentos(carga_horaria, data_treinamento, indice_satisfacao),
             colaboradores(nome, setor_id, setores(nome))
           `)
         if (tcErr) throw tcErr
@@ -291,7 +289,7 @@ export default function RelatoriosPage() {
 
       let query = supabase
         .from('treinamentos')
-        .select('id, codigo, tipo, carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao, empresa_parceira_id, empresas_parceiras(nome)')
+        .select('id, codigo, tipo, carga_horaria, data_treinamento, indice_satisfacao, empresa_parceira_id, empresas_parceiras(nome)')
         .in('id', ids)
         .gte('data_treinamento', appliedFilters.dataInicio)
         .lte('data_treinamento', appliedFilters.dataFim)
@@ -316,7 +314,7 @@ export default function RelatoriosPage() {
         .select(`
           treinamento_id,
           colaborador_id,
-          treinamentos(carga_horaria, data_treinamento, indice_satisfacao, indice_aprovacao),
+          treinamentos(carga_horaria, data_treinamento, indice_satisfacao),
           colaboradores(nome, setor_id, setores(nome))
         `)
         .eq('colaborador_id', colaboradorId)
@@ -463,17 +461,12 @@ export default function RelatoriosPage() {
         return month - 1 === mesNum && year === ano
       })
       const comSat = doMes.filter((t) => t.indice_satisfacao != null)
-      const comAprov = doMes.filter((t) => t.indice_aprovacao != null)
       const mediaSat = comSat.length
         ? comSat.reduce((a, t) => a + (t.indice_satisfacao ?? 0), 0) / comSat.length
-        : null
-      const mediaAprov = comAprov.length
-        ? comAprov.reduce((a, t) => a + (t.indice_aprovacao ?? 0), 0) / comAprov.length
         : null
       return {
         mes,
         mediaSatisfacao: mediaSat != null ? Number(mediaSat.toFixed(1)) : null,
-        mediaAprovacao: mediaAprov != null ? Number(mediaAprov.toFixed(1)) : null,
       }
     })
   }, [allTreinamentos, meses])
@@ -497,14 +490,13 @@ export default function RelatoriosPage() {
   }, [tcData])
 
   const rankingEmpresas = useMemo(() => {
-    const map = new Map<string, { qtd: number; horas: number; sat: number[]; aprov: number[] }>()
+    const map = new Map<string, { qtd: number; horas: number; sat: number[] }>()
     for (const t of allTreinamentos) {
       const nome = t.empresas_parceiras?.nome ?? 'Sem empresa'
-      const cur = map.get(nome) ?? { qtd: 0, horas: 0, sat: [], aprov: [] }
+      const cur = map.get(nome) ?? { qtd: 0, horas: 0, sat: [] }
       cur.qtd += 1
       cur.horas += t.carga_horaria ?? 0
       if (t.indice_satisfacao != null) cur.sat.push(t.indice_satisfacao)
-      if (t.indice_aprovacao != null) cur.aprov.push(t.indice_aprovacao)
       map.set(nome, cur)
     }
     return Array.from(map.entries())
@@ -514,7 +506,6 @@ export default function RelatoriosPage() {
         qtdTreinamentos: v.qtd,
         totalHoras: v.horas,
         mediaSatisfacao: v.sat.length ? Number((v.sat.reduce((a, b) => a + b, 0) / v.sat.length).toFixed(1)) : null,
-        mediaAprovacao: v.aprov.length ? Number((v.aprov.reduce((a, b) => a + b, 0) / v.aprov.length).toFixed(1)) : null,
       }))
       .sort((a, b) => b.totalHoras - a.totalHoras)
       .map((r, i) => ({ ...r, posicao: i + 1 }))
@@ -557,7 +548,6 @@ export default function RelatoriosPage() {
       const indicesData = indicesPorMes.map((r) => ({
         mes: r.mes,
         mediaSatisfacao: r.mediaSatisfacao ?? '',
-        mediaAprovacao: r.mediaAprovacao ?? '',
       }))
       const rankingColabData = rankingColaboradores.map((r) => ({
         posicao: r.posicao,
@@ -572,7 +562,6 @@ export default function RelatoriosPage() {
         qtdTreinamentos: r.qtdTreinamentos,
         totalHoras: r.totalHoras,
         mediaSatisfacao: r.mediaSatisfacao ?? '',
-        mediaAprovacao: r.mediaAprovacao ?? '',
       }))
 
       const treinamentosDetalhados = allTreinamentos.map((t) => ({
@@ -582,7 +571,6 @@ export default function RelatoriosPage() {
         dataTreinamento: t.data_treinamento,
         cargaHoraria: t.carga_horaria,
         indiceSatisfacao: t.indice_satisfacao ?? '',
-        indiceAprovacao: t.indice_aprovacao ?? '',
       }))
       exportReportToExcel([
         {
@@ -595,7 +583,6 @@ export default function RelatoriosPage() {
             dataTreinamento: 'Data do Treinamento',
             cargaHoraria: 'Carga Horária',
             indiceSatisfacao: 'Índice de Satisfação (%)',
-            indiceAprovacao: 'Índice de Aprovação (%)',
           },
         },
         {
@@ -616,7 +603,7 @@ export default function RelatoriosPage() {
         {
           name: 'Índices por Mês',
           data: indicesData,
-          headerLabels: { mes: 'Mês', mediaSatisfacao: 'Média Satisfação (%)', mediaAprovacao: 'Média Aprovação (%)' },
+          headerLabels: { mes: 'Mês', mediaSatisfacao: 'Média Satisfação (%)' },
         },
         {
           name: 'Ranking Colaboradores',
@@ -638,7 +625,6 @@ export default function RelatoriosPage() {
             qtdTreinamentos: 'Qtd. Treinamentos',
             totalHoras: 'Total de Horas',
             mediaSatisfacao: 'Média Satisfação (%)',
-            mediaAprovacao: 'Média Aprovação (%)',
           },
         },
       ])
@@ -942,7 +928,6 @@ export default function RelatoriosPage() {
               />
               <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
               <Line type="monotone" dataKey="mediaSatisfacao" stroke={COR_SATISFACAO} strokeWidth={2} dot={{ r: 4 }} name="Satisfação %" />
-              <Line type="monotone" dataKey="mediaAprovacao" stroke={COR_APROVACAO} strokeWidth={2} dot={{ r: 4 }} name="Aprovação %" />
             </LineChart>
           </ResponsiveContainer>
         )}
@@ -1009,7 +994,6 @@ export default function RelatoriosPage() {
                 <TableHead className="font-medium text-right">Qtd. Treinamentos</TableHead>
                 <TableHead className="font-medium text-right">Total de Horas</TableHead>
                 <TableHead className="font-medium text-right">Média Satisfação</TableHead>
-                <TableHead className="font-medium text-right">Média Aprovação</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1021,9 +1005,6 @@ export default function RelatoriosPage() {
                   <TableCell className="text-right font-medium">{r.totalHoras}</TableCell>
                   <TableCell className="text-right text-muted-foreground">
                     {r.mediaSatisfacao != null ? `${r.mediaSatisfacao}%` : '—'}
-                  </TableCell>
-                  <TableCell className="text-right text-muted-foreground">
-                    {r.mediaAprovacao != null ? `${r.mediaAprovacao}%` : '—'}
                   </TableCell>
                 </TableRow>
               ))}

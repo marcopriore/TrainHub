@@ -65,7 +65,6 @@ const HEADER_ALIASES_PARCEIRO: Record<string, string[]> = {
   empresa_parceira: ['Empresa Parceira', 'empresa_parceira'],
   data_treinamento: ['Data do Treinamento (DD/MM/AAAA)', 'data_treinamento'],
   indice_satisfacao: ['Índice de Satisfação (%)', 'indice_satisfacao'],
-  indice_aprovacao: ['Índice de Aprovação (%)', 'indice_aprovacao'],
 }
 
 const PARTICIPANTES_ALIASES: Record<string, string[]> = {
@@ -207,7 +206,6 @@ export function TreinamentoImportDialog({
         'Empresa Parceira',
         'Data do Treinamento (DD/MM/AAAA)',
         'Índice de Satisfação (%)',
-        'Índice de Aprovação (%)',
       ]
       const sample = {
         '#': '1',
@@ -218,13 +216,12 @@ export function TreinamentoImportDialog({
         'Empresa Parceira': 'Empresa ABC',
         'Data do Treinamento (DD/MM/AAAA)': '15/03/2025',
         'Índice de Satisfação (%)': '90',
-        'Índice de Aprovação (%)': '95',
       }
       downloadImportTreinamentosTemplate(
         'Treinamentos',
         headers,
         sample,
-        [8, 25, 40, 40, 25, 25, 28, 22, 22],
+        [8, 25, 40, 40, 25, 25, 28, 22],
         [
           [1, 'João da Silva', 'joao@empresa.com'],
           [1, 'Maria Santos', 'maria@empresa.com'],
@@ -243,7 +240,6 @@ export function TreinamentoImportDialog({
         'Empresa Parceira',
         'Data do Treinamento (DD/MM/AAAA)',
         'Índice de Satisfação (%)',
-        'Índice de Aprovação (%)',
       ]
       const sample = {
         '#': '1',
@@ -254,13 +250,12 @@ export function TreinamentoImportDialog({
         'Empresa Parceira': 'Empresa XYZ',
         'Data do Treinamento (DD/MM/AAAA)': '20/03/2025',
         'Índice de Satisfação (%)': '85',
-        'Índice de Aprovação (%)': '90',
       }
       downloadImportTreinamentosTemplate(
         'Treinamentos',
         headers,
         sample,
-        [8, 25, 40, 40, 25, 25, 28, 22, 22],
+        [8, 25, 40, 40, 25, 25, 28, 22],
         [
           [1, 'João da Silva', 'joao@neocredito.com.br'],
           [2, 'Maria Santos', 'maria@neocredito.com.br'],
@@ -359,7 +354,6 @@ export function TreinamentoImportDialog({
         const empresaNome = String(getExcelValue(row, 'empresa_parceira', headerAliases) ?? '').trim()
         const dataVal = getDataTreinamentoValue(row, headerAliases)
         const indiceSatisfacao = Number(getExcelValue(row, 'indice_satisfacao', headerAliases))
-        const indiceAprovacao = Number(getExcelValue(row, 'indice_aprovacao', headerAliases))
 
         if (!nome) {
           errs.push(`Linha ${linha}: Campo 'nome' obrigatório`)
@@ -388,14 +382,6 @@ export function TreinamentoImportDialog({
           errs.push(`Linha ${linha}: 'indice_satisfacao' deve ser entre 0 e 100`)
           continue
         }
-        if (
-          isNaN(indiceAprovacao) ||
-          indiceAprovacao < 0 ||
-          indiceAprovacao > 100
-        ) {
-          errs.push(`Linha ${linha}: 'indice_aprovacao' deve ser entre 0 e 100`)
-          continue
-        }
         const dupKey = `${nome.toLowerCase()}|${dataFormatted}`
         if (existentesSet.has(dupKey)) {
           errs.push(`Linha ${linha}: Treinamento "${nome}" na data ${dataFormatted} já existe`)
@@ -413,7 +399,6 @@ export function TreinamentoImportDialog({
           quantidade_pessoas: 0,
           data_treinamento: dataFormatted,
           indice_satisfacao: indiceSatisfacao,
-          indice_aprovacao: indiceAprovacao,
         })
       }
       parseAndValidateParticipantes(dataRows.length)
@@ -435,7 +420,6 @@ export function TreinamentoImportDialog({
         const empresaNome = String(getExcelValue(row, 'empresa_parceira', headerAliases) ?? '').trim()
         const dataVal = getDataTreinamentoValue(row, headerAliases)
         const indiceSatisfacao = Number(getExcelValue(row, 'indice_satisfacao', headerAliases))
-        const indiceAprovacao = Number(getExcelValue(row, 'indice_aprovacao', headerAliases))
 
         if (!nome) {
           errs.push(`Linha ${linha}: Campo 'nome' obrigatório`)
@@ -464,14 +448,6 @@ export function TreinamentoImportDialog({
           errs.push(`Linha ${linha}: 'indice_satisfacao' deve ser entre 0 e 100`)
           continue
         }
-        if (
-          isNaN(indiceAprovacao) ||
-          indiceAprovacao < 0 ||
-          indiceAprovacao > 100
-        ) {
-          errs.push(`Linha ${linha}: 'indice_aprovacao' deve ser entre 0 e 100`)
-          continue
-        }
         const dupKey = `${nome.toLowerCase()}|${dataFormatted}`
         if (existentesSet.has(dupKey)) {
           errs.push(`Linha ${linha}: Treinamento "${nome}" na data ${dataFormatted} já existe`)
@@ -488,7 +464,6 @@ export function TreinamentoImportDialog({
           empresa_parceira_id: empresa.id,
           data_treinamento: dataFormatted,
           indice_satisfacao: indiceSatisfacao,
-          indice_aprovacao: indiceAprovacao,
         })
       }
       parseAndValidateParticipantes(dataRows.length)
