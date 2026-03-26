@@ -220,120 +220,149 @@ async function run() {
     .from('colaboradores')
     .select('id, nome')
     .eq('tenant_id', tenantId)
-  const colab1 = colaboradores?.[0]?.id
-  const colab2 = colaboradores?.[1]?.id
 
   if (!empresaTi?.id) {
     console.log('Aviso: Nenhuma empresa parceira disponível. Pulando treinamentos.')
   } else {
-    const baseTrParceiro = {
-      tipo: 'parceiro' as const,
-      nome: '',
-      conteudo: '',
-      objetivo: '',
-      carga_horaria: 0,
-      empresa_parceira_id: empresaTi.id,
-      quantidade_pessoas: 0,
-      data_treinamento: '',
-      indice_satisfacao: 0,
-      tenant_id: tenantId,
+    const empresasIds = (empresas ?? []).map((e) => e.id)
+    const empresaFallback = empresaTi.id
+
+    const toDateOnly = (date: Date) => date.toISOString().slice(0, 10)
+    const meses: Date[] = []
+    for (let i = 11; i >= 0; i--) {
+      meses.push(new Date(new Date().getFullYear(), new Date().getMonth() - i, 10))
     }
 
-    const treinamentosParceiro = [
-      {
-        ...baseTrParceiro,
-        nome: 'Segurança do Trabalho',
-        conteudo: 'NRs aplicáveis, EPIs, análise de riscos.',
-        objetivo: 'Capacitar em normas de segurança.',
-        carga_horaria: 8,
-        quantidade_pessoas: 15,
-        data_treinamento: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-        indice_satisfacao: 92,
-        empresa_parceira_id: empresaTi.id,
-        tenant_id: tenantId,
-      },
-      {
-        ...baseTrParceiro,
-        nome: 'Gestão de Projetos Ágeis',
-        conteudo: 'Scrum, Kanban, cerimônias.',
-        objetivo: 'Introduzir metodologias ágeis.',
-        carga_horaria: 16,
-        empresa_parceira_id: empresaRh?.id ?? empresaTi.id,
-        quantidade_pessoas: 20,
-        data_treinamento: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-        indice_satisfacao: 88,
-        tenant_id: tenantId,
-      },
+    const temasParceiro = [
+      'Segurança do Trabalho',
+      'Liderança e Gestão de Equipes',
+      'Excel Avançado para Negócios',
+      'Gestão de Projetos Ágeis',
+      'Atendimento ao Cliente',
+      'Compliance e LGPD',
     ]
+    const temasColaborador = [
+      'Comunicação Interna',
+      'Produtividade e Organização',
+      'Boas Práticas de Atendimento',
+      'Ferramentas Digitais do Dia a Dia',
+      'Segurança da Informação',
+      'Trabalho em Equipe',
+    ]
+
+    const treinamentosSeed: Array<Record<string, unknown>> = []
+    const vinculosDesejados: Array<{ key: string; colaboradores: string[] }> = []
+
+    meses.forEach((baseDate, idx) => {
+      const mesTag = `${baseDate.getFullYear()}-${String(baseDate.getMonth() + 1).padStart(2, '0')}`
+      const empresaA = empresasIds[idx % (empresasIds.length || 1)] ?? empresaFallback
+      const empresaB = empresasIds[(idx + 1) % (empresasIds.length || 1)] ?? empresaFallback
+
+      const parceiroData = toDateOnly(new Date(baseDate.getFullYear(), baseDate.getMonth(), 10))
+      const parceiroNome = `${temasParceiro[idx % temasParceiro.length]} — Parceiros ${mesTag}`
+      treinamentosSeed.push({
+        tipo: 'parceiro',
+        nome: parceiroNome,
+        conteudo: `Treinamento parceiro do mês ${mesTag} com foco prático e estudo de casos.`,
+        objetivo: 'Desenvolver competências de execução e padronização operacional.',
+        carga_horaria: 6 + (idx % 5) * 2,
+        empresa_parceira_id: empresaA,
+        quantidade_pessoas: 12 + (idx % 10),
+        data_treinamento: parceiroData,
+        indice_satisfacao: 78 + (idx % 20),
+        tenant_id: tenantId,
+      })
+
+      const colaboradorData = toDateOnly(new Date(baseDate.getFullYear(), baseDate.getMonth(), 24))
+      const colaboradorNome = `${temasColaborador[idx % temasColaborador.length]} — Colaboradores ${mesTag}`
+      treinamentosSeed.push({
+        tipo: 'colaborador',
+        nome: colaboradorNome,
+        conteudo: `Trilha colaborador do mês ${mesTag}, com exercícios práticos e simulações.`,
+        objetivo: 'Elevar produtividade, qualidade de entrega e colaboração entre áreas.',
+        carga_horaria: 4 + (idx % 4) * 2,
+        empresa_parceira_id: empresaB,
+        quantidade_pessoas: null,
+        data_treinamento: colaboradorData,
+        indice_satisfacao: 74 + (idx % 24),
+        tenant_id: tenantId,
+      })
+
+      const cols = (colaboradores ?? []).map((c) => c.id)
+      if (cols.length > 0) {
+        const qtd = Math.min(3 + (idx % 2), cols.length)
+        const selecionados = Array.from({ length: qtd }, (_, n) => cols[(idx + n) % cols.length]!)
+        vinculosDesejados.push({
+          key: `colaborador|${colaboradorNome.toLowerCase()}|${colaboradorData}`,
+          colaboradores: selecionados,
+        })
+      }
+    })
 
     const { data: trExistentes } = await supabase
       .from('treinamentos')
-      .select('id')
+      .select('id, nome, data_treinamento, tipo')
       .eq('tenant_id', tenantId)
-      .limit(1)
 
-    const temTreinamentos = (trExistentes?.length ?? 0) > 0
+    const existentesMap = new Map(
+      (trExistentes ?? []).map((t) => [`${t.tipo}|${t.nome.toLowerCase()}|${t.data_treinamento}`, t.id as string])
+    )
 
-    if (!temTreinamentos) {
-      for (const t of treinamentosParceiro) {
-        const payload: Record<string, unknown> = { ...t }
-        const { data: tr, error: trErr } = await supabase
-          .from('treinamentos')
-          .insert(payload)
-          .select('id')
-          .single()
+    const novos = treinamentosSeed.filter((t) => {
+      const key = `${t.tipo}|${String(t.nome).toLowerCase()}|${t.data_treinamento}`
+      return !existentesMap.has(key)
+    })
 
-        if (trErr) {
-          console.warn('Erro ao inserir treinamento:', trErr.message)
-        } else {
-          console.log('✓ Treinamento inserido:', t.nome)
+    let inseridos = 0
+    if (novos.length > 0) {
+      const { data: inserted, error: insertErr } = await supabase
+        .from('treinamentos')
+        .insert(novos)
+        .select('id, nome, data_treinamento, tipo')
+
+      if (insertErr) {
+        console.error('Erro ao inserir treinamentos:', insertErr.message)
+      } else {
+        inseridos = inserted?.length ?? 0
+        for (const t of inserted ?? []) {
+          const key = `${t.tipo}|${t.nome.toLowerCase()}|${t.data_treinamento}`
+          existentesMap.set(key, t.id as string)
         }
       }
-
-      if (colab1 && colab2) {
-        const treinColab: Record<string, unknown> = {
-          tipo: 'colaborador',
-          nome: 'Comunicação Interna',
-          conteudo: 'Redação corporativa, feedback, reuniões.',
-          objetivo: 'Melhorar a comunicação interna.',
-          carga_horaria: 4,
-          empresa_parceira_id: empresaTi.id,
-          data_treinamento: new Date().toISOString().slice(0, 10),
-          indice_satisfacao: 85,
-          tenant_id: tenantId,
-        }
-        const { data: trColab, error: trColabErr } = await supabase
-          .from('treinamentos')
-          .insert(treinColab)
-          .select('id')
-          .single()
-
-        if (trColabErr) {
-          const { data: tr2, error: tr2Err } = await supabase
-            .from('treinamentos')
-            .insert(treinColab)
-            .select('id')
-            .single()
-          if (!tr2Err && tr2) {
-            await supabase.from('treinamento_colaboradores').insert([
-              { treinamento_id: tr2.id, colaborador_id: colab1 },
-              { treinamento_id: tr2.id, colaborador_id: colab2 },
-            ])
-            console.log('✓ Treinamento inserido: Comunicação Interna')
-          } else if (tr2Err) {
-            console.warn('Erro ao inserir treinamento colaborador:', tr2Err.message)
-          }
-        } else if (trColab) {
-          await supabase.from('treinamento_colaboradores').insert([
-            { treinamento_id: trColab.id, colaborador_id: colab1 },
-            { treinamento_id: trColab.id, colaborador_id: colab2 },
-          ])
-          console.log('✓ Treinamento inserido: Comunicação Interna')
-        }
-      }
-    } else {
-      console.log('✓ Treinamentos já existem, pulando.')
     }
+
+    let vinculosInseridos = 0
+    for (const v of vinculosDesejados) {
+      const treinamentoId = existentesMap.get(v.key)
+      if (!treinamentoId || v.colaboradores.length === 0) continue
+
+      const { data: vinculosExistentes } = await supabase
+        .from('treinamento_colaboradores')
+        .select('colaborador_id')
+        .eq('treinamento_id', treinamentoId)
+
+      const existentes = new Set((vinculosExistentes ?? []).map((x) => x.colaborador_id as string))
+      const rows = v.colaboradores
+        .filter((colaboradorId) => !existentes.has(colaboradorId))
+        .map((colaboradorId) => ({
+          treinamento_id: treinamentoId,
+          colaborador_id: colaboradorId,
+          tenant_id: tenantId,
+        }))
+
+      if (rows.length > 0) {
+        const { error: vincErr } = await supabase.from('treinamento_colaboradores').insert(rows)
+        if (vincErr) {
+          console.warn(`Aviso: erro ao vincular colaboradores no treinamento ${treinamentoId}:`, vincErr.message)
+        } else {
+          vinculosInseridos += rows.length
+        }
+      }
+    }
+
+    console.log(`✓ Treinamentos no seed: ${treinamentosSeed.length} planejados`)
+    console.log(`✓ Treinamentos inseridos nesta execução: ${inseridos}`)
+    console.log(`✓ Vínculos colaborador x treinamento inseridos: ${vinculosInseridos}`)
   }
 
   console.log('\n✅ Seed concluído com sucesso para o tenant TrainHub Master.')
