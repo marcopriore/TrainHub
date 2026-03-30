@@ -1428,7 +1428,7 @@ function ColaboradorForm({
           : null
       const displayMsg =
         (typeof msg === 'string' && msg.trim()) ? msg.trim() : 'Não foi possível salvar o treinamento. Tente novamente.'
-      console.error('Erro ao salvar treinamento:', { message: err?.message, details: err?.details, hint: err?.hint, raw: error })
+      console.error('Erro ao salvar treinamento:', displayMsg)
       toast.error(displayMsg)
     }
   }

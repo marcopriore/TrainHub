@@ -1,8 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
+import { canAccessTenant, getAuthUserOr401, getSupabaseAdmin, loadApiCaller } from '@/lib/server/api-route-auth'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -31,32 +29,15 @@ export async function POST(request: NextRequest) {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const supabaseAdmin = getSupabaseAdmin()
 
   try {
-    const cookieStore = await cookies()
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll() {},
-        },
-      }
-    )
+    const auth = await getAuthUserOr401()
+    if ('response' in auth) return auth.response
 
-    const {
-      data: { user },
-    } = await supabaseAuth.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+    const caller = await loadApiCaller(supabaseAdmin, auth.user.id)
+    if (!caller) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 403 })
     }
 
     const body = await request.json()
@@ -77,6 +58,10 @@ export async function POST(request: NextRequest) {
         { error: 'treinamento_id, tenant_id e formulario_id são obrigatórios' },
         { status: 400 }
       )
+    }
+
+    if (!canAccessTenant(caller, tenant_id)) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 403 })
     }
 
     const { data: formulario, error: formError } = await supabaseAdmin
@@ -178,7 +163,10 @@ export async function POST(request: NextRequest) {
       erros,
     })
   } catch (error) {
-    console.error('Erro ao enviar e-mails de pesquisa:', error)
+    console.error(
+      'Erro ao enviar e-mails de pesquisa:',
+      error instanceof Error ? error.message : 'erro desconhecido'
+    )
     return NextResponse.json(
       { error: 'Erro interno ao processar requisição' },
       { status: 500 }

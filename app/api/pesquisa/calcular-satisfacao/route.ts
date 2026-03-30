@@ -16,34 +16,44 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { tokenId } = body as { tokenId?: string }
+    const { token, tokenId } = body as { token?: string; tokenId?: string }
 
-    if (!tokenId || typeof tokenId !== 'string') {
+    if (!token || typeof token !== 'string') {
       return NextResponse.json(
-        { error: 'tokenId é obrigatório' },
+        { error: 'token (link público da pesquisa) é obrigatório' },
         { status: 400 }
       )
     }
 
-    const { data: tokenData, error: tokenError } = await supabaseAdmin
+    const { data: tokenRow, error: tokenError } = await supabaseAdmin
       .from('pesquisa_tokens')
-      .select('treinamento_id, formulario_id, tenant_id')
-      .eq('id', tokenId)
-      .single()
+      .select('id, treinamento_id, formulario_id, tenant_id, usado')
+      .eq('token', token)
+      .maybeSingle()
 
-    if (tokenError || !tokenData) {
-      return NextResponse.json(
-        { error: 'Token não encontrado' },
-        { status: 404 }
-      )
+    if (tokenError || !tokenRow) {
+      return NextResponse.json({ error: 'Token não encontrado' }, { status: 404 })
     }
 
-    const token = tokenData as { treinamento_id: string; formulario_id: string; tenant_id: string }
+    if (!tokenRow.usado) {
+      return NextResponse.json({ error: 'Pesquisa ainda não foi concluída' }, { status: 403 })
+    }
+
+    if (tokenId && typeof tokenId === 'string' && tokenRow.id !== tokenId) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 403 })
+    }
+
+    const tokenData = tokenRow as {
+      id: string
+      treinamento_id: string
+      formulario_id: string
+      tenant_id: string
+    }
 
     const { data: perguntasData } = await supabaseAdmin
       .from('pesquisa_perguntas')
       .select('id')
-      .eq('formulario_id', token.formulario_id)
+      .eq('formulario_id', tokenData.formulario_id)
       .eq('tipo', 'escala')
 
     const perguntaIds = (perguntasData ?? []).map((p: { id: string }) => p.id)
@@ -54,8 +64,8 @@ export async function POST(request: NextRequest) {
     const { data: tokensData } = await supabaseAdmin
       .from('pesquisa_tokens')
       .select('id')
-      .eq('treinamento_id', token.treinamento_id)
-      .eq('formulario_id', token.formulario_id)
+      .eq('treinamento_id', tokenData.treinamento_id)
+      .eq('formulario_id', tokenData.formulario_id)
       .eq('usado', true)
 
     const tokenIds = (tokensData ?? []).map((t: { id: string }) => t.id)
@@ -79,27 +89,24 @@ export async function POST(request: NextRequest) {
     }
 
     const media = valores.reduce((a, b) => a + b, 0) / valores.length
-    // Escala 1-5 → 0-100%: 1 = 0%, 3 = 50%, 5 = 100%
     const indice = Math.round(((media - 1) / 4) * 100)
 
     const { error: updateError } = await supabaseAdmin
       .from('treinamentos')
       .update({ indice_satisfacao: indice })
-      .eq('id', token.treinamento_id)
+      .eq('id', tokenData.treinamento_id)
+      .eq('tenant_id', tokenData.tenant_id)
 
     if (updateError) {
-      return NextResponse.json(
-        { error: 'Falha ao atualizar treinamento' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Falha ao atualizar treinamento' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, indice })
   } catch (error) {
-    console.error('Erro ao calcular satisfação:', error)
-    return NextResponse.json(
-      { error: 'Erro interno' },
-      { status: 500 }
+    console.error(
+      'Erro ao calcular satisfação:',
+      error instanceof Error ? error.message : 'erro desconhecido'
     )
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }

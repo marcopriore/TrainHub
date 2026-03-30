@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "seed": "npx tsx scripts/seed.ts",
     "seed:reset": "npx tsx scripts/seed.ts -- --reset",
-    "remover-tenant-vazio": "npx tsx scripts/remover-tenant-vazio.ts"
+    "remover-tenant-vazio": "npx tsx scripts/remover-tenant-vazio.ts",
+    "validate:supabase": "npx tsx scripts/validate-supabase.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

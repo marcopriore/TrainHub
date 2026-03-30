@@ -1,5 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  canAccessTenant,
+  getAuthUserOr401,
+  getSupabaseAdmin,
+  loadApiCaller,
+} from '@/lib/server/api-route-auth'
 
 export async function POST(request: NextRequest) {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -9,10 +14,14 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const auth = await getAuthUserOr401()
+  if ('response' in auth) return auth.response
+
+  const supabaseAdmin = getSupabaseAdmin()
+  const caller = await loadApiCaller(supabaseAdmin, auth.user.id)
+  if (!caller) {
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 403 })
+  }
 
   try {
     const body = await request.json()
@@ -34,6 +43,10 @@ export async function POST(request: NextRequest) {
         { error: 'treinamentoNome, tenantId e colaboradorIds (array não vazio) são obrigatórios' },
         { status: 400 }
       )
+    }
+
+    if (!canAccessTenant(caller, tenantId)) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 403 })
     }
 
     const titulo = 'Novo treinamento registrado'
@@ -88,7 +101,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Erro na API de notificações:', error)
+    console.error(
+      'Erro na API de notificações:',
+      error instanceof Error ? error.message : 'erro desconhecido'
+    )
     return NextResponse.json(
       { error: 'Erro interno ao processar notificações' },
       { status: 500 }

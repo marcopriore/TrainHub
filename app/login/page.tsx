@@ -38,7 +38,15 @@ function translateAuthError(message: string): string {
   if (lower.includes('email not confirmed')) return 'E-mail não confirmado. Verifique sua caixa de entrada.'
   if (lower.includes('user not found')) return 'Usuário não encontrado.'
   if (lower.includes('too many requests')) return 'Muitas tentativas. Aguarde alguns minutos.'
-  if (lower.includes('network') || lower.includes('fetch')) return 'Erro de conexão. Tente novamente.'
+  if (
+    lower.includes('failed to fetch') ||
+    lower.includes('networkerror') ||
+    lower.includes('load failed') ||
+    lower.includes('network') ||
+    lower.includes('fetch')
+  ) {
+    return 'Não foi possível conectar ao Supabase. Confira: internet; projeto ativo no dashboard; NEXT_PUBLIC_SUPABASE_URL e ANON_KEY no .env.local; reinicie npm run dev após mudar o .env.'
+  }
   return message
 }
 
@@ -73,7 +81,7 @@ export default function LoginPage() {
       router.refresh()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro ao fazer login'
-      toast.error(msg)
+      toast.error(translateAuthError(msg))
     }
   }
 
@@ -92,7 +100,8 @@ export default function LoginPage() {
       setForgotOpen(false)
       forgotForm.reset()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erro ao enviar e-mail')
+      const msg = err instanceof Error ? err.message : 'Erro ao enviar e-mail'
+      toast.error(translateAuthError(msg))
     } finally {
       setForgotSubmitting(false)
     }

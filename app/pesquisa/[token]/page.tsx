@@ -177,7 +177,7 @@ export default function PesquisaTokenPage() {
         await fetch('/api/pesquisa/calcular-satisfacao', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tokenId: tokenData.id }),
+          body: JSON.stringify({ token: tokenParam, tokenId: tokenData.id }),
         })
       } catch {
         // Falha silenciosa — não impede o sucesso da resposta
