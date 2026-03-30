@@ -25,6 +25,7 @@ export const PERMISSOES = [
   'gerenciar_empresas_parceiras',
   'ver_dashboard_geral',
   'ver_minhas_trilhas',
+  'ver_catalogo',
   'gerenciar_catalogo',
   'gerenciar_categorias',
   'gerenciar_pesquisas',
@@ -50,7 +51,9 @@ export const PERMISSOES_LABELS: Record<string, string> = {
   gerenciar_perfis: 'Gerenciar Perfis de Acesso',
   ver_dashboard_geral: 'Ver Dashboard Geral',
   ver_minhas_trilhas: 'Ver Minhas Trilhas',
-  gerenciar_catalogo: 'Gerenciar Catálogo de Treinamentos',
+  ver_catalogo:
+    'Acessar Catálogo (vitrine: explorar, preferências, favoritos e avaliações)',
+  gerenciar_catalogo: 'Gerenciar itens do Catálogo de Treinamentos (gestão)',
   gerenciar_categorias: 'Gerenciar Categorias de Treinamentos',
   gerenciar_pesquisas: 'Gerenciar Pesquisas de Satisfação',
   gerenciar_avaliacoes: 'Gerenciar Avaliações',

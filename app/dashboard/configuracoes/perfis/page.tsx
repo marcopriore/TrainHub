@@ -2,7 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Pencil, Trash2, Shield, ClipboardList, BookOpen, GraduationCap, LogOut, ChevronLeft } from 'lucide-react'
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Shield,
+  ClipboardList,
+  BookOpen,
+  Library,
+  GraduationCap,
+  LogOut,
+  ChevronLeft,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@/lib/use-user'
@@ -44,6 +55,7 @@ const ICON_MAP = {
   Shield,
   ClipboardList,
   BookOpen,
+  Library,
 } as const
 
 const PERMISSOES_AGRUPADAS = [
@@ -110,13 +122,6 @@ const PERMISSOES_AGRUPADAS = [
         permissoes: [{ key: 'ver_dashboard_geral' as const, label: 'Ver Dashboard Geral' }],
       },
       {
-        categoria: 'Catálogo',
-        permissoes: [
-          { key: 'gerenciar_catalogo' as const, label: 'Gerenciar Catálogo de Treinamentos' },
-          { key: 'gerenciar_categorias' as const, label: 'Gerenciar Categorias' },
-        ],
-      },
-      {
         categoria: 'Pesquisas',
         permissoes: [
           { key: 'gerenciar_pesquisas' as const, label: 'Gerenciar Pesquisas de Satisfação' },
@@ -132,6 +137,36 @@ const PERMISSOES_AGRUPADAS = [
       {
         categoria: 'Trilhas',
         permissoes: [{ key: 'ver_minhas_trilhas' as const, label: 'Ver Minhas Trilhas' }],
+      },
+    ],
+  },
+  {
+    grupo: 'Módulo: Catálogo de Treinamentos',
+    icone: 'Library' as const,
+    cor: '#00C9A7',
+    categorias: [
+      {
+        categoria: 'Vitrine (colaborador)',
+        permissoes: [
+          {
+            key: 'ver_catalogo' as const,
+            label:
+              'Acessar vitrine (explorar, busca, sugestões, novidades, preferências, favoritos e avaliações)',
+          },
+        ],
+      },
+      {
+        categoria: 'Gestão (administração do catálogo)',
+        permissoes: [
+          {
+            key: 'gerenciar_catalogo' as const,
+            label: 'Gerenciar itens do catálogo (criar, editar, publicar treinamentos)',
+          },
+          {
+            key: 'gerenciar_categorias' as const,
+            label: 'Gerenciar categorias (usadas no catálogo e nas preferências)',
+          },
+        ],
       },
     ],
   },
@@ -624,7 +659,7 @@ export default function PerfisPage() {
                   Perfis Admin têm acesso completo a todas as permissões internas.
                 </p>
               )}
-              <ScrollArea className="h-[340px] rounded-md border border-border p-3">
+              <ScrollArea className="h-[min(420px,55vh)] rounded-md border border-border p-3">
                 <div className="space-y-1">
                   {PERMISSOES_AGRUPADAS.map((grupo) => {
                     const Icone = ICON_MAP[grupo.icone]

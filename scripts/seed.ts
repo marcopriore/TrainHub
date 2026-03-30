@@ -65,7 +65,7 @@ async function run() {
         slug: TENANT_SLUG,
         ativo: true,
       })
-      .select('id')
+      .select('id, nome, slug')
       .single()
 
     if (createError) {
@@ -93,10 +93,47 @@ async function run() {
     console.log('✓ Tenant encontrado:', tenant.nome, '(' + tenant.id + ')')
   }
 
-  const tenantId = tenant!.id
+  const tenantRow = tenant as { id: string; nome: string; slug: string }
+  if (tenantRow.slug !== TENANT_SLUG) {
+    console.error(
+      `Seed abortado: o tenant retornado não é o TrainHub Master (slug esperado: ${TENANT_SLUG}).`
+    )
+    process.exit(1)
+  }
+  if (tenantRow.nome.trim() !== TENANT_NOME) {
+    console.warn(
+      `Aviso: nome do tenant é "${tenantRow.nome}" (esperado: "${TENANT_NOME}"). O slug confere; dados serão gravados neste ID.`
+    )
+  }
+  console.log(
+    '→ Seed exclusivo do tenant TrainHub Master (slug trainhub-master). Nenhum outro cliente (ex.: Neo Crédito) é alterado.\n'
+  )
+
+  const tenantId = tenantRow.id
+
+  {
+    const { data: modsExistentes } = await supabase
+      .from('tenant_modulos')
+      .select('modulo')
+      .eq('tenant_id', tenantId)
+    const mods = new Set((modsExistentes ?? []).map((r: { modulo: string }) => r.modulo))
+    if (!mods.has('catalogo')) {
+      const { error: modErr } = await supabase.from('tenant_modulos').insert({
+        tenant_id: tenantId,
+        modulo: 'catalogo',
+        ativo: true,
+      })
+      if (modErr && !String(modErr.message).toLowerCase().includes('duplicate')) {
+        console.warn('Aviso: módulo catálogo:', modErr.message)
+      } else if (!modErr) {
+        console.log('✓ Módulo catálogo habilitado para o tenant.')
+      }
+    }
+  }
 
   if (FORCE_RESET) {
     console.log('🔄 Modo --reset: removendo dados existentes do tenant...')
+    await supabase.from('catalogo_treinamentos').delete().eq('tenant_id', tenantId)
     const { data: trIds } = await supabase.from('treinamentos').select('id').eq('tenant_id', tenantId)
     const ids = (trIds ?? []).map((t) => t.id)
     if (ids.length > 0) {
@@ -363,6 +400,269 @@ async function run() {
     console.log(`✓ Treinamentos no seed: ${treinamentosSeed.length} planejados`)
     console.log(`✓ Treinamentos inseridos nesta execução: ${inseridos}`)
     console.log(`✓ Vínculos colaborador x treinamento inseridos: ${vinculosInseridos}`)
+  }
+
+  {
+    const nomesCategorias = ['Soft Skills', 'Tecnologia', 'Compliance', 'Gestão']
+    for (const nome of nomesCategorias) {
+      const { data: cEx } = await supabase
+        .from('categorias')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .eq('nome', nome)
+        .maybeSingle()
+      if (!cEx) {
+        const { error: cErr } = await supabase.from('categorias').insert({ nome, tenant_id: tenantId })
+        if (cErr) console.warn('Aviso: categoria', nome, cErr.message)
+        else console.log('✓ Categoria criada:', nome)
+      }
+    }
+
+    /* ~15 itens; imagens via Unsplash CDN (demos). Licença Unsplash: unsplash.com/license */
+    const catalogoSeed: Array<Record<string, unknown>> = [
+      {
+        tenant_id: tenantId,
+        titulo: 'Excel Avançado para Negócios',
+        categoria: 'Tecnologia',
+        nivel: 'avancado',
+        modalidade: 'presencial',
+        carga_horaria: 16,
+        objetivo: 'Dominar recursos avançados para análise de dados no trabalho.',
+        conteudo_programatico: 'Tabelas dinâmicas, Power Query, dashboards e automação básica com macros.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        tenant_id: tenantId,
+        titulo: 'LGPD na Prática',
+        categoria: 'Compliance',
+        nivel: 'basico',
+        modalidade: 'online',
+        carga_horaria: 8,
+        objetivo: 'Entender e aplicar a LGPD no dia a dia da empresa.',
+        conteudo_programatico: 'Bases legais, DPIA, direitos do titular, DPO e boas práticas internas.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        tenant_id: tenantId,
+        titulo: 'Liderança e Gestão',
+        categoria: 'Gestão',
+        nivel: 'intermediario',
+        modalidade: 'hibrido',
+        carga_horaria: 24,
+        objetivo: 'Desenvolver habilidades de liderança, feedback e alinhamento de metas.',
+        conteudo_programatico: 'Estilos de liderança, delegação, 1:1s e gestão de times híbridos.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        tenant_id: tenantId,
+        titulo: 'Comunicação e Colaboração',
+        categoria: 'Soft Skills',
+        nivel: 'basico',
+        modalidade: 'online',
+        carga_horaria: 6,
+        objetivo: 'Melhorar comunicação assertiva e trabalho em equipe.',
+        conteudo_programatico: 'Escuta ativa, reuniões eficazes, feedback e resolução de conflitos.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        tenant_id: tenantId,
+        titulo: 'Python para Automação de Rotinas',
+        categoria: 'Tecnologia',
+        nivel: 'intermediario',
+        modalidade: 'online',
+        carga_horaria: 20,
+        objetivo: 'Automatizar tarefas repetitivas com scripts Python no ambiente corporativo.',
+        conteudo_programatico: 'Sintaxe, arquivos, APIs, pandas básico e agendamento de jobs.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        tenant_id: tenantId,
+        titulo: 'Segurança da Informação NIST',
+        categoria: 'Compliance',
+        nivel: 'intermediario',
+        modalidade: 'hibrido',
+        carga_horaria: 12,
+        objetivo: 'Reduzir riscos cibernéticos com práticas alinhadas ao NIST CSF.',
+        conteudo_programatico: 'Identificar, proteger, detectar, responder e recuperar incidentes.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        tenant_id: tenantId,
+        titulo: 'Scrum e Gestão Ágil',
+        categoria: 'Gestão',
+        nivel: 'basico',
+        modalidade: 'presencial',
+        carga_horaria: 16,
+        objetivo: 'Aplicar Scrum para entregas iterativas e transparência com stakeholders.',
+        conteudo_programatico: 'Papéis, eventos, artefatos, métricas e facilitação de cerimônias.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1531403009284-440f080d1e12?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        tenant_id: tenantId,
+        titulo: 'Inteligência Emocional no Trabalho',
+        categoria: 'Soft Skills',
+        nivel: 'intermediario',
+        modalidade: 'online',
+        carga_horaria: 8,
+        objetivo: 'Regular emoções, empatia e relacionamentos profissionais.',
+        conteudo_programatico: 'Autoconsciência, automotivação, empatia e habilidades sociais.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        tenant_id: tenantId,
+        titulo: 'Power BI e Storytelling com Dados',
+        categoria: 'Tecnologia',
+        nivel: 'intermediario',
+        modalidade: 'hibrido',
+        carga_horaria: 18,
+        objetivo: 'Construir dashboards e narrativas que apoiam decisões de negócio.',
+        conteudo_programatico: 'Modelagem, DAX introdutório, visualizações e publicação no serviço.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        tenant_id: tenantId,
+        titulo: 'Prevenção à Lavagem de Dinheiro (PLD)',
+        categoria: 'Compliance',
+        nivel: 'avancado',
+        modalidade: 'presencial',
+        carga_horaria: 12,
+        objetivo: 'Conhecer obrigações PLD/FT e fluxos de reporte à UIF.',
+        conteudo_programatico: 'CDD, KYC, monitoramento de transações e cultura de compliance.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        tenant_id: tenantId,
+        titulo: 'Negociação e Influência',
+        categoria: 'Soft Skills',
+        nivel: 'avancado',
+        modalidade: 'presencial',
+        carga_horaria: 14,
+        objetivo: 'Fechar acordos com preparação, alternativas e valor mútuo.',
+        conteudo_programatico: 'BATNA, escuta ativa, objeções e negociações multiparte.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1521791136064-7986c2920216?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        tenant_id: tenantId,
+        titulo: 'Gestão de Tempo e Alta Performance',
+        categoria: 'Gestão',
+        nivel: 'basico',
+        modalidade: 'online',
+        carga_horaria: 4,
+        objetivo: 'Priorizar o que importa e reduzir desperdício de atenção.',
+        conteudo_programatico: 'Matriz Eisenhower, blocos de foco, e-mail e reuniões enxutas.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        tenant_id: tenantId,
+        titulo: 'UX Writing e Acessibilidade Digital',
+        categoria: 'Tecnologia',
+        nivel: 'basico',
+        modalidade: 'online',
+        carga_horaria: 10,
+        objetivo: 'Escrever interfaces claras e inclusivas (WCAG).',
+        conteudo_programatico: 'Tom de voz, microcopy, testes com leitores de tela e linguagem simples.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1586717791821-3f44a5638e48?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        tenant_id: tenantId,
+        titulo: 'Ética, Conduta e Canal de Denúncias',
+        categoria: 'Compliance',
+        nivel: 'basico',
+        modalidade: 'online',
+        carga_horaria: 6,
+        objetivo: 'Fortalecer cultura ética e uso responsável do canal de denúncias.',
+        conteudo_programatico: 'Código de conduta, conflitos de interesse, presentes e antifraude.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        tenant_id: tenantId,
+        titulo: 'Facilitação de Workshops e Design Sprint',
+        categoria: 'Soft Skills',
+        nivel: 'intermediario',
+        modalidade: 'presencial',
+        carga_horaria: 16,
+        objetivo: 'Conduzir dinâmicas colaborativas com método e segurança de grupo.',
+        conteudo_programatico: 'Check-in, divergência, decisão, prototipagem rápida e retrospectivas.',
+        status: 'ativo',
+        imagem_url:
+          'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=1200&q=80&auto=format&fit=crop',
+      },
+    ]
+
+    const { data: catRows } = await supabase
+      .from('catalogo_treinamentos')
+      .select('titulo')
+      .eq('tenant_id', tenantId)
+    const titulosCat = new Set((catRows ?? []).map((r) => String(r.titulo).trim().toLowerCase()))
+
+    let catInseridos = 0
+    for (const row of catalogoSeed) {
+      const t = String(row.titulo).trim().toLowerCase()
+      if (titulosCat.has(t)) continue
+      const { error: insErr } = await supabase.from('catalogo_treinamentos').insert(row)
+      if (insErr) {
+        console.warn('Aviso: catálogo', row.titulo, insErr.message)
+      } else {
+        titulosCat.add(t)
+        catInseridos += 1
+        console.log('✓ Catálogo (ativo):', row.titulo)
+      }
+    }
+    if (catInseridos === 0 && catalogoSeed.length > 0) {
+      console.log('✓ Nenhum título novo no catálogo; sincronizando imagens e textos dos existentes.')
+    }
+
+    for (const row of catalogoSeed) {
+      const titulo = String(row.titulo)
+      const imagem_url = row.imagem_url as string | undefined
+      if (!imagem_url) continue
+      const { error: updErr } = await supabase
+        .from('catalogo_treinamentos')
+        .update({
+          imagem_url,
+          objetivo: row.objetivo,
+          conteudo_programatico: row.conteudo_programatico,
+          categoria: row.categoria,
+          nivel: row.nivel,
+          modalidade: row.modalidade,
+          carga_horaria: row.carga_horaria,
+          status: row.status,
+        })
+        .eq('tenant_id', tenantId)
+        .eq('titulo', titulo)
+      if (updErr) {
+        console.warn('Aviso: atualizar catálogo', titulo, updErr.message)
+      }
+    }
+    console.log('✓ Catálogo: 15 programas seed; imagens Unsplash aplicadas por título (re-run seguro).')
   }
 
   console.log('\n✅ Seed concluído com sucesso para o tenant TrainHub Master.')

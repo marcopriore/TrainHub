@@ -72,6 +72,25 @@ export default function ModulosPage() {
     user?.isMaster?.() || modulosAtivos['trilhas'] === true
   const podeAcessarAvaliacoes =
     user?.isMaster?.() || modulosAtivos['avaliacoes'] === true
+  const podeEntrarNaVitrineCatalogo =
+    user?.isMaster?.() ||
+    user?.hasPermission?.('ver_catalogo') ||
+    user?.hasPermission?.('gerenciar_catalogo')
+  const podeAcessarCatalogo =
+    user?.isMaster?.() ||
+    (modulosAtivos['catalogo'] === true && podeEntrarNaVitrineCatalogo)
+
+  const toastCatalogoIndisponivel = () => {
+    if (modulosAtivos['catalogo'] !== true) {
+      toast.error(
+        'Este módulo não está habilitado para sua organização. Entre em contato com o administrador.'
+      )
+    } else {
+      toast.error(
+        'Seu perfil não tem permissão para o catálogo. Solicite em Configurações → Perfil de Acesso a opção de vitrine ou gestão do catálogo.'
+      )
+    }
+  }
   const podeAcessarConfiguracoes = user?.isMaster?.() || user?.isAdmin?.()
 
   const initials = user?.nome
@@ -313,33 +332,73 @@ export default function ModulosPage() {
           )}
 
           {/* Card 3 — Catálogo de Treinamentos */}
-          <div
-            className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 opacity-60 cursor-not-allowed"
-          >
-            <div className="flex justify-between items-start">
-              <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: `${COR_CATALOGO}1a`, color: COR_CATALOGO }}
-              >
-                <Library className="w-6 h-6" />
+          {podeAcessarCatalogo ? (
+            <Link
+              href="/dashboard/catalogo"
+              className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 hover:shadow-md hover:border-[#8b5cf6]/40 transition-all duration-200 cursor-pointer group"
+            >
+              <div className="flex justify-between items-start">
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${COR_CATALOGO}1a`, color: COR_CATALOGO }}
+                >
+                  <Library className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400">
+                  Ativo
+                </span>
               </div>
-              <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                Em breve
-              </span>
+              <div>
+                <h2 className="font-semibold text-lg text-foreground">
+                  Catálogo de Treinamentos
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Explore programas com sugestões baseadas no seu perfil e histórico
+                </p>
+              </div>
+              <div className="flex items-center gap-1 text-sm font-medium" style={{ color: COR_CATALOGO }}>
+                <span>Acessar</span>
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            </Link>
+          ) : (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => toastCatalogoIndisponivel()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  toastCatalogoIndisponivel()
+                }
+              }}
+              className="h-52 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 opacity-60 cursor-not-allowed"
+            >
+              <div className="flex justify-between items-start">
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${COR_CATALOGO}1a`, color: COR_CATALOGO }}
+                >
+                  <Library className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                  Sem acesso
+                </span>
+              </div>
+              <div>
+                <h2 className="font-semibold text-lg text-foreground">
+                  Catálogo de Treinamentos
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Explore o catálogo completo de treinamentos disponíveis
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Lock className="w-4 h-4" />
+                <span>Sem acesso</span>
+              </div>
             </div>
-            <div>
-              <h2 className="font-semibold text-lg text-foreground">
-                Catálogo de Treinamentos
-              </h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Explore o catálogo completo de treinamentos disponíveis
-              </p>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Lock className="w-4 h-4" />
-              <span>Em breve</span>
-            </div>
-          </div>
+          )}
 
           {/* Card 4 — Avaliações */}
           {podeAcessarAvaliacoes ? (

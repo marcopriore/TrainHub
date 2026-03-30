@@ -44,6 +44,8 @@ const tenantSchema = z.object({
 
 type TenantFormData = z.infer<typeof tenantSchema>
 
+type TenantModuloKey = 'gestao' | 'trilhas' | 'catalogo' | 'avaliacoes'
+
 const COR_GESTAO = '#00C9A7'
 const COR_TRILHAS = '#3b82f6'
 const COR_CATALOGO = '#8b5cf6'
@@ -57,9 +59,11 @@ export default function TenantEditPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [modulos, setModulos] = useState<{ gestao: boolean; trilhas: boolean }>({
+  const [modulos, setModulos] = useState<Record<TenantModuloKey, boolean>>({
     gestao: false,
     trilhas: false,
+    catalogo: false,
+    avaliacoes: false,
   })
   const [moduloSaving, setModuloSaving] = useState<string | null>(null)
 
@@ -108,11 +112,14 @@ export default function TenantEditPage() {
 
         if (modulosErr) throw modulosErr
 
-        const gestao =
-          (modulosData ?? []).find((r) => r.modulo === 'gestao')?.ativo ?? false
-        const trilhas =
-          (modulosData ?? []).find((r) => r.modulo === 'trilhas')?.ativo ?? false
-        setModulos({ gestao, trilhas })
+        const row = (m: string) =>
+          (modulosData ?? []).find((r) => r.modulo === m)?.ativo ?? false
+        setModulos({
+          gestao: row('gestao'),
+          trilhas: row('trilhas'),
+          catalogo: row('catalogo'),
+          avaliacoes: row('avaliacoes'),
+        })
       } catch (err) {
         console.error(err)
         toast.error('Erro ao carregar tenant')
@@ -164,14 +171,14 @@ export default function TenantEditPage() {
     }
   }
 
-  const toggleModulo = async (modulo: 'gestao' | 'trilhas', ativo: boolean) => {
+  const toggleModulo = async (modulo: TenantModuloKey, ativo: boolean) => {
     if (!id) return
     setModuloSaving(modulo)
     try {
       const { error } = await supabase.from('tenant_modulos').upsert(
         {
           tenant_id: id,
-          modulo: modulo === 'gestao' ? 'gestao' : 'trilhas',
+          modulo,
           ativo,
         },
         { onConflict: 'tenant_id,modulo' }
@@ -373,8 +380,8 @@ export default function TenantEditPage() {
               />
             </div>
 
-            {/* Catálogo de Treinamentos — Em breve */}
-            <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4 opacity-60">
+            {/* Catálogo de Treinamentos */}
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
               <div className="flex items-center gap-3 min-w-0">
                 <div
                   className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -386,24 +393,25 @@ export default function TenantEditPage() {
                   <Library className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-foreground">
-                      Catálogo de Treinamentos
-                    </p>
-                    <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
-                      Em breve
-                    </span>
-                  </div>
+                  <p className="font-medium text-foreground">
+                    Catálogo de Treinamentos
+                  </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Em breve
+                    Vitrine de programas, preferências, favoritos e avaliações internas
                   </p>
                 </div>
               </div>
-              <Switch disabled />
+              <Switch
+                checked={modulos.catalogo}
+                onCheckedChange={(checked) =>
+                  toggleModulo('catalogo', checked === true)
+                }
+                disabled={moduloSaving === 'catalogo'}
+              />
             </div>
 
-            {/* Avaliações e Certificados — Em breve */}
-            <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4 opacity-60">
+            {/* Avaliações e Certificados */}
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
               <div className="flex items-center gap-3 min-w-0">
                 <div
                   className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -415,20 +423,21 @@ export default function TenantEditPage() {
                   <Award className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-foreground">
-                      Avaliações e Certificados
-                    </p>
-                    <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
-                      Em breve
-                    </span>
-                  </div>
+                  <p className="font-medium text-foreground">
+                    Avaliações e Certificados
+                  </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Em breve
+                    Módulo de avaliações e certificados para colaboradores
                   </p>
                 </div>
               </div>
-              <Switch disabled />
+              <Switch
+                checked={modulos.avaliacoes}
+                onCheckedChange={(checked) =>
+                  toggleModulo('avaliacoes', checked === true)
+                }
+                disabled={moduloSaving === 'avaliacoes'}
+              />
             </div>
           </div>
         </div>

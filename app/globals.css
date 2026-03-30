@@ -122,6 +122,59 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* Catálogo: faixa horizontal contínua (marquee linear, estilo vitrine) */
+@keyframes catalog-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.catalog-marquee-outer {
+  overflow-x: hidden;
+  overflow-y: hidden;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 4%,
+    black 96%,
+    transparent
+  );
+  mask-image: linear-gradient(to right, transparent, black 4%, black 96%, transparent);
+}
+
+.catalog-marquee-track {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  width: max-content;
+  gap: 1rem;
+  animation: catalog-marquee 50s linear infinite;
+  will-change: transform;
+}
+
+.catalog-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalog-marquee-outer {
+    -webkit-mask-image: none;
+    mask-image: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+
+  .catalog-marquee-track {
+    animation: none;
+    padding-inline: 0.25rem;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
