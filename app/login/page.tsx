@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { createClient } from '@/lib/supabase'
 import { registrarAuditoriaCliente } from '@/lib/registrar-auditoria'
+import { usuarioTemTermosPlataformaAtuais } from '@/lib/termos-plataforma'
 import { toast } from 'sonner'
 
 const loginSchema = z.object({
@@ -82,10 +83,11 @@ export default function LoginPage() {
         data: { session },
       } = await supabase.auth.getSession()
       const uid = session?.user?.id
+      let destino = '/dashboard'
       if (uid) {
         const { data: row } = await supabase
           .from('usuarios')
-          .select('tenant_id')
+          .select('tenant_id, termos_plataforma_versao')
           .eq('id', uid)
           .maybeSingle()
         const ua = typeof navigator !== 'undefined' ? navigator.userAgent : null
@@ -98,8 +100,13 @@ export default function LoginPage() {
           detalhes: { email: data.email, metodo: 'senha' },
           userAgent: ua,
         })
+        destino = usuarioTemTermosPlataformaAtuais(
+          (row as { termos_plataforma_versao?: string | null } | null)?.termos_plataforma_versao ?? null
+        )
+          ? '/dashboard'
+          : '/aceitar-termos'
       }
-      router.push('/dashboard')
+      router.push(destino)
       router.refresh()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro ao fazer login'

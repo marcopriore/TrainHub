@@ -1,5 +1,5 @@
 # TrainHub — Documento de Contexto Completo
-> Atualizado em 30/03/2026 — Para continuidade em nova conversa
+> Atualizado em 31/03/2026 — Para continuidade em nova conversa
 
 ---
 
@@ -11,7 +11,7 @@
 - **Branch principal:** `main` (produção) | `develop` (desenvolvimento)
 - **Deploy PRD:** https://trainhub-app.vercel.app
 - **Deploy DEV:** https://trainhub-dev.vercel.app
-- **Versão atual:** v2.20.3
+- **Versão atual:** v2.21.0
 
 ---
 
@@ -99,15 +99,29 @@ treinamentos: id, tenant_id, tipo, nome, conteudo, objetivo, carga_horaria,
 treinamento_colaboradores: id, tenant_id, treinamento_id (CASCADE), colaborador_id, criado_em
 treinamento_parceiros: id, treinamento_id (CASCADE), tenant_id, nome, email, criado_em
 
--- Catálogo
+-- Catálogo (local por tenant)
 catalogo_treinamentos: id, tenant_id, titulo, conteudo_programatico, objetivo,
                        carga_horaria, categoria, nivel, modalidade, imagem_url,
-                       status, criado_em, atualizado_em, criado_por
+                       status, criado_em, atualizado_em, criado_por,
+                       (+ colunas pool global: copiado_de_global_id, pool_global_consentimento,
+                       pool_global_consentimento_em, pool_global_termo_versao, pool_global_linhagem_id)
+
+-- Catálogo global (pool TrainHub — moderação Master)
+catalogo_treinamentos_globais: versões publicadas / fila de linhagem
+catalogo_global_submissoes: submissões pendentes de tenants (moderação)
+tenant_catalogo_global_categorias: opt-in por categoria para exibir globais na vitrine do tenant
+
+-- Flag global de produto (uma linha; só Master atualiza)
+platform_feature_flags: id (PK fixo 'singleton'),
+                        catalogo_trainings_module_enabled boolean DEFAULT false,
+                        atualizado_em, atualizado_por (FK usuarios)
+-- Migration: supabase/migrations/20250402120000_platform_feature_flags.sql
+-- RLS: SELECT authenticated; UPDATE apenas is_current_user_master()
 
 -- Módulos por tenant
 tenant_modulos: id, tenant_id, modulo, ativo, criado_em, atualizado_em
                 UNIQUE(tenant_id, modulo)
-                Valores: 'gestao', 'trilhas', 'avaliacoes' (futuros: 'catalogo')
+                Valores: 'gestao', 'trilhas', 'avaliacoes', 'catalogo'
 
 -- Sequência de códigos
 tenant_codigo_seq: tenant_id, ultimo_numero
@@ -232,12 +246,20 @@ app/
 │   ├── page.tsx                       # HOME de Módulos
 │   ├── perfil/page.tsx
 │   │
+│   ├── catalogo/                      # Vitrine (módulo catálogo do tenant + flag plataforma)
+│   │   ├── layout.tsx                 # Guard: tenant_modulos.catalogo + flag plataforma
+│   │   ├── page.tsx
+│   │   ├── preferencias/page.tsx
+│   │   └── [id]/page.tsx
+│   │
 │   ├── configuracoes/
 │   │   ├── layout.tsx
-│   │   ├── page.tsx
+│   │   ├── page.tsx                   # Hub; card Plataforma (Master); card Catálogo global se flag on
+│   │   ├── plataforma/page.tsx        # Master: toggle catalogo_trainings_module_enabled
+│   │   ├── catalogo-global/page.tsx   # Master: moderação pool global (redirect se flag off)
 │   │   ├── perfis/page.tsx
 │   │   ├── usuarios/page.tsx
-│   │   └── tenants/[id]/page.tsx
+│   │   └── tenants/[id]/page.tsx      # Switch módulo catálogo tenant (oculto se flag plataforma off)
 │   │
 │   ├── avaliacoes/
 │   │   ├── layout.tsx                 # Guard módulo avaliacoes
@@ -265,7 +287,8 @@ app/
 │           ├── setores/page.tsx
 │           ├── empresas-parceiras/page.tsx
 │           ├── colaboradores/page.tsx
-│           └── categorias/page.tsx
+│           ├── categorias/page.tsx           # Sempre acessível (categorias locais)
+│           └── opt-in-globais/page.tsx      # Bloqueado se flag plataforma off
 │
 └── api/
     ├── admin/
@@ -282,33 +305,55 @@ app/
 
 ---
 
-## 10. COMPONENTES PRINCIPAIS
+## 10. COMPONENTES E LIBS RELEVANTES
 ```
 components/
-├── app-shell.tsx                   # Layout + sidebar com permissões
+├── app-shell.tsx                   # Sidebar; oculta “Conteúdo global (vitrine)” se flag plataforma off
 ├── user-provider.tsx               # Provider do contexto + cache sessionStorage
-├── tenant-selector.tsx             # Seletor de tenant (master only)
+├── tenant-selector.tsx            # Seletor de tenant (master only)
 ├── notificacoes-sino.tsx           # Sino com badge, realtime + polling 15s
 └── treinamento-import-dialog.tsx   # Dialog de importação em massa via Excel
+
+lib/
+└── use-catalogo-modulo-plataforma.ts   # Lê platform_feature_flags (singleton); expõe estado do módulo vitrine/pool
 ```
+
+`.gitignore` inclui `*.tsbuildinfo` / `tsconfig.tsbuildinfo` e pastas de build comuns para permitir `git add .` sem ruído de cache TypeScript.
 
 ---
 
 ## 11. MÓDULOS DO SISTEMA
 
 ### HOME (/dashboard)
-- Grid 2x2 de cards de módulos
+- Grid de cards de módulos
 - TenantSelector inline no header (Master only)
-- Verifica tenant_modulos para habilitar/bloquear cards
+- Verifica `tenant_modulos` para habilitar/bloquear cards
+- **Card “Catálogo de Treinamentos” (vitrine):** só aparece se `catalogo_trainings_module_enabled` estiver **true** na tabela `platform_feature_flags` (após load do hook)
 
 ### Módulo: Gestão de Treinamentos (/dashboard/gestao)
 - Dashboard com métricas e gráficos
-- Registrar Treinamento (Parceiro/Colaborador) com wizard de importação Excel
+- Registrar Treinamento (Parceiro/Colaborador) com wizard de importação Excel; catálogo **local** (`catalogo_treinamentos`) no seletor **independente** da flag de plataforma
 - Histórico com paginação (20/página), filtros avançados, exportação Excel
 - Relatórios com infinite scroll, filtros Curso/Turma server-side
-- Catálogo de treinamentos com template de certificado (drag-and-drop)
+- **Treinamentos (gestão do catálogo local):** `/gestao/catalogo` — **sempre acessível** com módulo gestão ativo; template de certificado; quando a flag plataforma está **off**: ocultam-se apenas **“Importar do global”** e o bloco de **consentimento / fila para o pool global**; gravar continua preservando metadados de pool já existentes no registro se o item estiver ativo
+- **Configurações → Categorias:** acessíveis com flag off (categorias **locais** para cadastros e registros)
+- **Configurações → Conteúdo global (opt-in vitrine):** bloqueado (redirect) quando flag plataforma off
 - Pesquisas de satisfação com disparo por e-mail (Resend)
 - Avaliações com disparo por e-mail (Resend)
+
+### Flag global do catálogo (Master — Configurações → Plataforma)
+- Tabela `platform_feature_flags`, linha `id = 'singleton'`, campo `catalogo_trainings_module_enabled` (default **false** após migration)
+- **Quando false (módulo “oculto” para vitrine/pool):**
+  - Vitrine `/dashboard/catalogo/*` bloqueada no layout (toast + redirect)
+  - Hub Configurações: card **Catálogo global** (moderação) oculto; página `catalogo-global` redireciona (Master → Plataforma; demais → hub)
+  - Menu Gestão: item **Conteúdo global (vitrine)** oculto; **opt-in-globais** bloqueado no `gestao/layout`
+  - **Perfis:** grupo de permissões “Módulo: Catálogo de Treinamentos” oculto no diálogo enquanto a flag estiver off (após load; durante load mostra todos para evitar flash)
+  - **Tenant [id]:** switch do módulo catálogo do tenant oculto quando flag off
+- **Quando true:** vitrine, pool (import, consentimento, submissões, moderação Master, opt-in), menus e permissões voltam ao comportamento completo
+
+### Módulo: Catálogo — Vitrine (/dashboard/catalogo)
+- Preferências do colaborador, listagem e detalhe `/[id]`; exige `tenant_modulos.catalogo` e permissões de vitrine
+- **Desligada** quando `catalogo_trainings_module_enabled` é false: layout redireciona para `/dashboard` (com feedback)
 
 ### Módulo: Minhas Trilhas (/dashboard/gestao/minhas-trilhas)
 - Sem sidebar (layout isolado)
@@ -360,6 +405,11 @@ components/
 - Aba "Participantes": Treinamento #, Nome, E-mail
 - Validação: e-mail de colaborador deve existir no sistema
 - Parceiros salvos em `treinamento_parceiros`
+
+### Pool global e flag de plataforma (operação)
+- **Migration obrigatória:** `supabase/migrations/20250402120000_platform_feature_flags.sql` — insere linha `singleton` com `catalogo_trainings_module_enabled = false` por defeito
+- **Master** ativa/desativa em `/dashboard/configuracoes/plataforma`; client lê via `lib/use-catalogo-modulo-plataforma.ts`
+- Com flag **off**, tenants continuam a usar **gestão local**, **categorias**, **registro de treinamentos** e cópias já importadas do global; não há envio novo à fila nem UI de import/consent até reativar
 
 ---
 
@@ -445,6 +495,7 @@ components/
 | v2.20.1 | Fix: pesquisa_tokens com nome e email preenchidos |
 | v2.20.2 | Fix: tenant incorreto na criação de usuário |
 | v2.20.3 | Fix: e-mail duplicado com mensagem em português |
+| v2.21.0 | Flag global `platform_feature_flags` (Master); kill switch vitrine/pool; gestão local de treinamentos, categorias e registro preservados; `.gitignore` para `tsbuildinfo` |
 
 ---
 
@@ -463,7 +514,7 @@ components/
 - [ ] Tela de perfil do usuário: editar nome e foto
 
 ### 🟢 Módulos futuros planejados
-- [ ] **Catálogo de Treinamentos** (módulo completo para colaboradores)
+- [x] **Catálogo de Treinamentos** (vitrine + gestão local + pool global): entregue; controlado por `tenant_modulos.catalogo` e flag plataforma `catalogo_trainings_module_enabled`
 - [ ] **Trilhas de Conhecimento** estruturadas com sequência de treinamentos
 - [ ] **Próximos Treinamentos** (matrículas/agendamentos)
 - [ ] Reenvio individual de avaliação por participante
@@ -484,12 +535,13 @@ components/
 - [x] Cache de performance no UserProvider
 - [x] Fix de timezone em datas
 - [x] Schema de treinamentos sem `indice_aprovacao`: front e seeds alinhados ao banco
+- [x] Migration `20250402120000_platform_feature_flags` e hook `useCatalogoModuloPlataforma` para esconder vitrine/pool sem desligar gestão local
 
 ---
 
 ## 16. ROTINA DE VERSIONAMENTO
 ```bash
-git add .
+git add .                    # Respeita .gitignore (incl. *.tsbuildinfo, .next, .env.local)
 git commit -m "feat/fix/chore: descrição"
 git tag -a vX.Y.Z -m "vX.Y.Z - descrição"
 git push origin develop        # deploy DEV
@@ -519,4 +571,4 @@ git checkout develop
 ---
 
 *Documento gerado automaticamente para continuidade do desenvolvimento.*
-*Versão atual: v2.20.3 | Última atualização: 30/03/2026*
+*Versão atual: v2.21.0 | Última atualização: 31/03/2026*

@@ -1,7 +1,16 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const publicPaths = ['/login', '/auth/callback', '/auth/reset-password', '/sem-acesso', '/pesquisa', '/avaliacao', '/api/pesquisa']
+const publicPaths = [
+  '/login',
+  '/auth/callback',
+  '/auth/reset-password',
+  '/sem-acesso',
+  '/pesquisa',
+  '/avaliacao',
+  '/api/pesquisa',
+  '/legal',
+]
 
 function isPublicPath(pathname: string) {
   return publicPaths.some((path) => pathname === path || pathname.startsWith(path + '/'))
@@ -28,27 +37,25 @@ export async function middleware(request: NextRequest) {
   )
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession()
+    data: { user },
+  } = await supabase.auth.getUser()
 
   const pathname = request.nextUrl.pathname
 
   if (pathname === '/') {
-    return NextResponse.redirect(
-      new URL(session ? '/dashboard' : '/login', request.url)
-    )
+    return NextResponse.redirect(new URL(user ? '/dashboard' : '/login', request.url))
   }
 
   const isPublic = isPublicPath(pathname)
 
   if (isPublic) {
-    if (session && pathname === '/login') {
+    if (user && pathname === '/login') {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
     return response
   }
 
-  if (!session) {
+  if (!user) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 

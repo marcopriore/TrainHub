@@ -36,6 +36,7 @@ const ENTIDADE_POR_TABELA: Record<string, string> = {
 const ACAO_EXATA: Record<string, string> = {
   login: 'Login no sistema',
   importacao_planilha_excel: 'Importação de planilha Excel',
+  aceite_termos_plataforma: 'Aceite de termos e política de privacidade',
 }
 
 const VERBO_CRUD: Record<string, string> = {

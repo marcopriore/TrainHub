@@ -4,6 +4,7 @@ import * as React from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { UserContext, createUserWithHelpers, getActiveTenantId, type UserContextValue } from '@/lib/user-context'
+import { usuarioTemTermosPlataformaAtuais } from '@/lib/termos-plataforma'
 
 const DEBUG_USER_PROVIDER = false
 
@@ -11,6 +12,14 @@ const PUBLIC_PATHS = ['/login', '/auth/callback', '/sem-acesso']
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(path + '/'))
+}
+
+/** Rotas onde não forçamos o fluxo de aceite (leitura de documentos, auth e própria página de aceite). */
+function pathIsExemptFromTermosGate(pathname: string) {
+  if (pathname === '/aceitar-termos') return true
+  if (pathname.startsWith('/legal')) return true
+  if (pathname.startsWith('/auth/')) return true
+  return false
 }
 
 interface UsuarioRow {
@@ -21,6 +30,8 @@ interface UsuarioRow {
   ativo: boolean
   tenant_id: string | null
   perfil_id: string | null
+  termos_plataforma_versao?: string | null
+  termos_plataforma_aceitos_em?: string | null
 }
 
 interface TenantRow {
@@ -89,9 +100,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
                 perfil: PerfilRow | null
                 permissoes: string[]
               }
+              const cachedVersao = (cached.usuario as UsuarioRow).termos_plataforma_versao ?? null
               if (
                 Date.now() - cached.ts < USER_CACHE_TTL_MS &&
-                cached.usuario.id === userId
+                cached.usuario.id === userId &&
+                usuarioTemTermosPlataformaAtuais(cachedVersao)
               ) {
                 if (DEBUG_USER_PROVIDER) console.log('Usando cache de usuário do sessionStorage')
                 const userData = createUserWithHelpers({
@@ -246,6 +259,23 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           permissoes: listaPermissoes,
         })
         setValue({ user: userData, loading: false, error: null })
+
+        const path = pathname ?? ''
+        if (
+          row.ativo &&
+          !pathIsExemptFromTermosGate(path) &&
+          !usuarioTemTermosPlataformaAtuais(row.termos_plataforma_versao ?? null)
+        ) {
+          router.replace('/aceitar-termos')
+          return
+        }
+        if (
+          path === '/aceitar-termos' &&
+          usuarioTemTermosPlataformaAtuais(row.termos_plataforma_versao ?? null)
+        ) {
+          router.replace('/dashboard')
+          return
+        }
 
         // Atualiza cache em sessionStorage
         if (typeof window !== 'undefined') {
