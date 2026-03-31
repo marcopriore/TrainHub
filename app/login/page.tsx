@@ -17,6 +17,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { createClient } from '@/lib/supabase'
+import { registrarAuditoriaCliente } from '@/lib/registrar-auditoria'
 import { toast } from 'sonner'
 
 const loginSchema = z.object({
@@ -76,6 +77,27 @@ export default function LoginPage() {
       if (error) {
         toast.error(translateAuthError(error.message))
         return
+      }
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const uid = session?.user?.id
+      if (uid) {
+        const { data: row } = await supabase
+          .from('usuarios')
+          .select('tenant_id')
+          .eq('id', uid)
+          .maybeSingle()
+        const ua = typeof navigator !== 'undefined' ? navigator.userAgent : null
+        await registrarAuditoriaCliente(supabase, {
+          userId: uid,
+          tenantId: (row as { tenant_id: string | null } | null)?.tenant_id ?? null,
+          acao: 'login',
+          entidade: 'sessao',
+          entidadeId: uid,
+          detalhes: { email: data.email, metodo: 'senha' },
+          userAgent: ua,
+        })
       }
       router.push('/dashboard')
       router.refresh()

@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import {
-  Settings,
   LogOut,
   Shield,
   Users,
@@ -12,6 +11,7 @@ import {
   ChevronLeft,
   Library,
   SlidersHorizontal,
+  ScrollText,
 } from 'lucide-react'
 import { useUser } from '@/lib/use-user'
 import { useCatalogoModuloPlataforma } from '@/lib/use-catalogo-modulo-plataforma'
@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 const COR_PERFIS = '#00C9A7'
 const COR_USUARIOS = '#3b82f6'
 const COR_TENANTS = '#8b5cf6'
+const COR_AUDITORIA = '#64748b'
 
 export default function ConfiguracoesPage() {
   const { user, loading } = useUser()
@@ -170,6 +171,33 @@ export default function ConfiguracoesPage() {
                 </p>
               </div>
               <div className="flex items-center gap-1 text-sm font-medium" style={{ color: COR_TENANTS }}>
+                <span>Acessar</span>
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            </Link>
+          )}
+
+          {user?.isMaster?.() && (
+            <Link
+              href="/dashboard/configuracoes/auditoria"
+              className="h-44 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 hover:shadow-md hover:border-slate-400/50 transition-all duration-200 group"
+            >
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: `${COR_AUDITORIA}1a`, color: COR_AUDITORIA }}
+              >
+                <ScrollText className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-lg text-foreground">Log de auditoria</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Histórico de eventos (ex.: moderação do catálogo global)
+                </p>
+              </div>
+              <div
+                className="flex items-center gap-1 text-sm font-medium"
+                style={{ color: COR_AUDITORIA }}
+              >
                 <span>Acessar</span>
                 <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </div>

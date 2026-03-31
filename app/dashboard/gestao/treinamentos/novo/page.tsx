@@ -10,6 +10,7 @@ import { PlusCircle, Trash2, Building2, Users, FileSpreadsheet, Lock, Copy, Uplo
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@/lib/use-user'
+import { registrarAuditoriaCliente } from '@/lib/registrar-auditoria'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -372,6 +373,16 @@ export default function NovoTreinamentoPage() {
                 .eq('id', treinamentoId)
             }
           }
+          if (user?.id) {
+            await registrarAuditoriaCliente(supabaseClient, {
+              userId: user.id,
+              tenantId: activeTenantId,
+              acao: 'importacao_planilha_excel',
+              entidade: 'treinamentos',
+              entidadeId: null,
+              detalhes: { modo: 'parceiro', registros: data.length },
+            })
+          }
         }}
         onImportColaborador={async (data) => {
           if (!activeTenantId) throw new Error('Tenant não identificado')
@@ -423,6 +434,16 @@ export default function NovoTreinamentoPage() {
                 .update({ quantidade_pessoas: colabIds.length })
                 .eq('id', treinamentoId)
             }
+          }
+          if (user?.id) {
+            await registrarAuditoriaCliente(supabaseClient, {
+              userId: user.id,
+              tenantId: activeTenantId,
+              acao: 'importacao_planilha_excel',
+              entidade: 'treinamentos',
+              entidadeId: null,
+              detalhes: { modo: 'colaborador', registros: data.length },
+            })
           }
         }}
         onSuccess={() => {

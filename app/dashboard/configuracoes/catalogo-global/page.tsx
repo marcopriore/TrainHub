@@ -190,15 +190,6 @@ export default function CatalogoGlobalModeracaoPage() {
 
       if (upSub) throw upSub
 
-      await supabase.from('auditoria_eventos').insert({
-        ator_id: user.id,
-        tenant_id: sub.tenant_id,
-        acao: 'aprovar_catalogo_global',
-        entidade: 'catalogo_global_submissao',
-        entidade_id: sub.id,
-        detalhes: { linhagem_id: sub.linhagem_id, versao: sub.versao, titulo: sub.titulo },
-      })
-
       toast.success('Publicado no catálogo global.')
       await load()
     } catch (e) {
@@ -231,15 +222,6 @@ export default function CatalogoGlobalModeracaoPage() {
 
       if (error) throw error
 
-      await supabase.from('auditoria_eventos').insert({
-        ator_id: user.id,
-        tenant_id: rejectTarget.tenant_id,
-        acao: 'reprovar_catalogo_global',
-        entidade: 'catalogo_global_submissao',
-        entidade_id: rejectTarget.id,
-        detalhes: { motivo: m },
-      })
-
       toast.success('Submissão reprovada.')
       setRejectOpen(false)
       setRejectTarget(null)
@@ -269,19 +251,6 @@ export default function CatalogoGlobalModeracaoPage() {
         .eq('status', 'publicado')
 
       if (error) throw error
-
-      await supabase.from('auditoria_eventos').insert({
-        ator_id: user.id,
-        tenant_id: depublishTarget.origem_tenant_id,
-        acao: 'despublicar_catalogo_global',
-        entidade: 'catalogo_treinamentos_globais',
-        entidade_id: depublishTarget.id,
-        detalhes: {
-          titulo: depublishTarget.titulo,
-          linhagem_id: depublishTarget.linhagem_id,
-          versao: depublishTarget.versao,
-        },
-      })
 
       toast.success('Item retirado do catálogo global.')
       setDepublishTarget(null)
