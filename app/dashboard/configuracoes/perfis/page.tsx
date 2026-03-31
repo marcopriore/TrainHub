@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   Plus,
@@ -17,6 +17,7 @@ import {
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@/lib/use-user'
+import { useCatalogoModuloPlataforma } from '@/lib/use-catalogo-modulo-plataforma'
 import { type Permissao } from '@/lib/user-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -197,7 +198,16 @@ interface Perfil {
 
 export default function PerfisPage() {
   const { getActiveTenantId, user } = useUser()
+  const { catalogoModuloPlataformaAtivo, loadingCatalogoPlataforma } =
+    useCatalogoModuloPlataforma()
   const activeTenantId = getActiveTenantId()
+
+  const gruposPermissoesVisiveis = useMemo(() => {
+    if (loadingCatalogoPlataforma) return PERMISSOES_AGRUPADAS
+    return catalogoModuloPlataformaAtivo
+      ? PERMISSOES_AGRUPADAS
+      : PERMISSOES_AGRUPADAS.filter((g) => !g.grupo.includes('Catálogo de Treinamentos'))
+  }, [catalogoModuloPlataformaAtivo, loadingCatalogoPlataforma])
   const [perfis, setPerfis] = useState<Perfil[]>([])
   const [permissoesPorPerfil, setPermissoesPorPerfil] = useState<Record<string, string[]>>({})
   const [loading, setLoading] = useState(true)
@@ -661,7 +671,7 @@ export default function PerfisPage() {
               )}
               <ScrollArea className="h-[min(420px,55vh)] rounded-md border border-border p-3">
                 <div className="space-y-1">
-                  {PERMISSOES_AGRUPADAS.map((grupo) => {
+                  {gruposPermissoesVisiveis.map((grupo) => {
                     const Icone = ICON_MAP[grupo.icone]
                     const isGrupoEditavelAdmin =
                       editingPerfil?.is_admin &&

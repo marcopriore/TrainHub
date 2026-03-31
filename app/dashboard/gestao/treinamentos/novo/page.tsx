@@ -153,6 +153,8 @@ export default function NovoTreinamentoPage() {
     if (!activeTenantId) {
       setEmpresas([])
       setColaboradores([])
+      setCatalogoItems([])
+      setFormulariosPesquisa([])
       return
     }
     const loadData = async () => {

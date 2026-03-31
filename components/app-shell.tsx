@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { useUser } from '@/lib/use-user'
+import { useCatalogoModuloPlataforma } from '@/lib/use-catalogo-modulo-plataforma'
 import {
   GraduationCap,
   LayoutDashboard,
@@ -64,6 +65,10 @@ interface SidebarProps {
 function SidebarContent({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname()
   const { user, loading } = useUser()
+  const { catalogoModuloPlataformaAtivo, loadingCatalogoPlataforma } =
+    useCatalogoModuloPlataforma()
+  const catalogoNoMenu =
+    !loadingCatalogoPlataforma && catalogoModuloPlataformaAtivo
 
   const initials = user?.nome
     ? user.nome
@@ -167,6 +172,11 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
               <CollapsibleContent>
                 <ul className="flex flex-col gap-0.5 mt-1 pl-1">
                   {configNavItems.map(({ href, label, icon: Icon, masterOnly, permission }) => {
+                    if (
+                      href === '/dashboard/gestao/configuracoes/opt-in-globais' &&
+                      !catalogoNoMenu
+                    )
+                      return null
                     if (masterOnly && !user?.isMaster()) return null
                     if (permission && !user?.hasPermission?.(permission) && !user?.isAdmin?.() && !user?.isMaster?.()) return null
                     const isActive = pathname === href

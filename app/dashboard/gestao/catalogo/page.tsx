@@ -6,6 +6,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@/lib/use-user'
+import { useCatalogoModuloPlataforma } from '@/lib/use-catalogo-modulo-plataforma'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -278,8 +279,20 @@ type FormValues = {
   pool_global_consentimento: boolean
 }
 
+type CatalogoGlobalRow = {
+  id: string
+  titulo: string
+  categoria: string | null
+  nivel: string | null
+  versao: number
+}
+
 export default function CatalogoPage() {
   const { user, getActiveTenantId } = useUser()
+  const { catalogoModuloPlataformaAtivo, loadingCatalogoPlataforma } =
+    useCatalogoModuloPlataforma()
+  const poolGlobalUiDisponivel =
+    !loadingCatalogoPlataforma && catalogoModuloPlataformaAtivo
   const activeTenantId = getActiveTenantId()
 
   const canManage =
@@ -827,31 +840,50 @@ export default function CatalogoPage() {
       return
     }
 
-    const consentEfetivo = values.status === 'ativo' ? values.pool_global_consentimento : false
-    if (values.status === 'ativo' && consentEfetivo) {
-      const aceiteOk =
-        poolTermoAceito ||
-        (!!editingItem &&
-          termoPoolGlobalAtual(
-            !!editingItem.pool_global_consentimento,
-            editingItem.pool_global_termo_versao ?? null
-          ))
-      if (!aceiteOk) {
-        toast.error('Leia e aceite o termo do catálogo global antes de salvar.')
-        setPoolTermoDialogOpen(true)
-        return
+    if (poolGlobalUiDisponivel) {
+      const consentEfetivoCheck =
+        values.status === 'ativo' ? values.pool_global_consentimento : false
+      if (values.status === 'ativo' && consentEfetivoCheck) {
+        const aceiteOk =
+          poolTermoAceito ||
+          (!!editingItem &&
+            termoPoolGlobalAtual(
+              !!editingItem.pool_global_consentimento,
+              editingItem.pool_global_termo_versao ?? null
+            ))
+        if (!aceiteOk) {
+          toast.error('Leia e aceite o termo do catálogo global antes de salvar.')
+          setPoolTermoDialogOpen(true)
+          return
+        }
       }
     }
 
     setSubmitting(true)
     try {
       const agora = new Date().toISOString()
-      const consentEm =
-        consentEfetivo
+
+      let consentEfetivo: boolean
+      let consentEm: string | null
+      let poolTermoVersaoVal: string | null
+
+      if (poolGlobalUiDisponivel) {
+        consentEfetivo = values.status === 'ativo' ? values.pool_global_consentimento : false
+        consentEm = consentEfetivo
           ? editingItem?.pool_global_consentimento
             ? editingItem.pool_global_consentimento_em ?? agora
             : agora
           : null
+        poolTermoVersaoVal = consentEfetivo ? POOL_GLOBAL_TERMO_VERSAO : null
+      } else if (values.status === 'ativo' && editingItem) {
+        consentEfetivo = !!editingItem.pool_global_consentimento
+        consentEm = editingItem.pool_global_consentimento_em ?? null
+        poolTermoVersaoVal = editingItem.pool_global_termo_versao ?? null
+      } else {
+        consentEfetivo = false
+        consentEm = null
+        poolTermoVersaoVal = null
+      }
 
       const payload = {
         titulo: tituloTrimmed,
@@ -866,7 +898,7 @@ export default function CatalogoPage() {
         atualizado_em: agora,
         pool_global_consentimento: consentEfetivo,
         pool_global_consentimento_em: consentEm,
-        pool_global_termo_versao: consentEfetivo ? POOL_GLOBAL_TERMO_VERSAO : null,
+        pool_global_termo_versao: poolTermoVersaoVal,
       }
 
       let catalogId: string
@@ -908,7 +940,12 @@ export default function CatalogoPage() {
         ? 'Treinamento atualizado com sucesso.'
         : 'Treinamento cadastrado com sucesso.'
 
-      if (values.status === 'ativo' && consentEfetivo && !user?.isMaster?.()) {
+      if (
+        poolGlobalUiDisponivel &&
+        values.status === 'ativo' &&
+        consentEfetivo &&
+        !user?.isMaster?.()
+      ) {
         const { data: maxGlob } = await supabase
           .from('catalogo_treinamentos_globais')
           .select('versao')
@@ -1410,118 +1447,122 @@ export default function CatalogoPage() {
               </DialogContent>
             </Dialog>
 
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!activeTenantId}
-              className="w-full sm:w-auto shrink-0 border-[#00C9A7]/60 text-[#00C9A7] hover:bg-[#00C9A7]/5"
-              onClick={() => {
-                setImportGlobalOpen(true)
-                void loadImportGlobalLista()
-              }}
-            >
-              <Globe className="w-4 h-4 mr-1.5" />
-              Importar do global
-            </Button>
-            <Dialog
-              open={importGlobalOpen}
-              onOpenChange={(open) => {
-                setImportGlobalOpen(open)
-                if (!open) setImportGlobalSearch('')
-                if (open) void loadImportGlobalLista()
-              }}
-            >
-              <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
-                <DialogHeader>
-                  <DialogTitle className="font-serif text-2xl">Importar do catálogo global</DialogTitle>
-                  <DialogDescription>
-                    Cria um <strong className="text-foreground font-medium">rascunho</strong> no seu catálogo
-                    local com metadados e conteúdo programático. Você pode editar antes de publicar. Cada origem
-                    global só pode ser importada uma vez por tenant (exclua a cópia se precisar importar de
-                    novo).
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-3 flex-1 min-h-0 flex flex-col">
-                  <Input
-                    placeholder="Buscar por título ou categoria..."
-                    value={importGlobalSearch}
-                    onChange={(e) => setImportGlobalSearch(e.target.value)}
-                    className="max-w-md"
-                  />
-                  {importGlobalLoading ? (
-                    <div className="space-y-2 py-4">
-                      <Skeleton className="h-10 w-full" />
-                      <Skeleton className="h-10 w-full" />
-                    </div>
-                  ) : importGlobalFiltrados.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-6">
-                      {importGlobalRows.length === 0
-                        ? 'Nenhum treinamento publicado no catálogo global no momento.'
-                        : 'Nenhum resultado para a busca.'}
-                    </p>
-                  ) : (
-                    <ScrollArea className="h-[min(420px,50vh)] border rounded-md">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Título</TableHead>
-                            <TableHead className="hidden sm:table-cell">Categoria</TableHead>
-                            <TableHead className="hidden md:table-cell">Nível</TableHead>
-                            <TableHead className="text-right w-[120px]">Ação</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {importGlobalFiltrados.map((r) => {
-                            const ja = globalIdsJaImportados.has(r.id)
-                            const niv = r.nivel
-                              ? NIVEL_LABEL[r.nivel as keyof typeof NIVEL_LABEL] ?? r.nivel
-                              : '—'
-                            return (
-                              <TableRow key={r.id}>
-                                <TableCell>
-                                  <span className="font-medium line-clamp-2">{r.titulo}</span>
-                                  <span className="sm:hidden text-xs text-muted-foreground block mt-1">
-                                    {r.categoria ?? '—'} · v{r.versao}
-                                  </span>
-                                </TableCell>
-                                <TableCell className="hidden sm:table-cell text-muted-foreground">
-                                  {r.categoria ?? '—'}
-                                </TableCell>
-                                <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
-                                  {niv}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  {ja ? (
-                                    <span className="text-xs text-muted-foreground">Já importado</span>
-                                  ) : (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="secondary"
-                                      className="gap-1"
-                                      disabled={importingGlobalId !== null}
-                                      onClick={() => importarDoGlobal(r.id)}
-                                    >
-                                      <Download className="w-3.5 h-3.5" />
-                                      {importingGlobalId === r.id ? '...' : 'Importar'}
-                                    </Button>
-                                  )}
-                                </TableCell>
+            {poolGlobalUiDisponivel && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!activeTenantId}
+                  className="w-full sm:w-auto shrink-0 border-[#00C9A7]/60 text-[#00C9A7] hover:bg-[#00C9A7]/5"
+                  onClick={() => {
+                    setImportGlobalOpen(true)
+                    void loadImportGlobalLista()
+                  }}
+                >
+                  <Globe className="w-4 h-4 mr-1.5" />
+                  Importar do global
+                </Button>
+                <Dialog
+                  open={importGlobalOpen}
+                  onOpenChange={(open) => {
+                    setImportGlobalOpen(open)
+                    if (!open) setImportGlobalSearch('')
+                    if (open) void loadImportGlobalLista()
+                  }}
+                >
+                  <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
+                    <DialogHeader>
+                      <DialogTitle className="font-serif text-2xl">Importar do catálogo global</DialogTitle>
+                      <DialogDescription>
+                        Cria um <strong className="text-foreground font-medium">rascunho</strong> no seu
+                        catálogo local com metadados e conteúdo programático. Você pode editar antes de
+                        publicar. Cada origem global só pode ser importada uma vez por tenant (exclua a cópia
+                        se precisar importar de novo).
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3 flex-1 min-h-0 flex flex-col">
+                      <Input
+                        placeholder="Buscar por título ou categoria..."
+                        value={importGlobalSearch}
+                        onChange={(e) => setImportGlobalSearch(e.target.value)}
+                        className="max-w-md"
+                      />
+                      {importGlobalLoading ? (
+                        <div className="space-y-2 py-4">
+                          <Skeleton className="h-10 w-full" />
+                          <Skeleton className="h-10 w-full" />
+                        </div>
+                      ) : importGlobalFiltrados.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-6">
+                          {importGlobalRows.length === 0
+                            ? 'Nenhum treinamento publicado no catálogo global no momento.'
+                            : 'Nenhum resultado para a busca.'}
+                        </p>
+                      ) : (
+                        <ScrollArea className="h-[min(420px,50vh)] border rounded-md">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Título</TableHead>
+                                <TableHead className="hidden sm:table-cell">Categoria</TableHead>
+                                <TableHead className="hidden md:table-cell">Nível</TableHead>
+                                <TableHead className="text-right w-[120px]">Ação</TableHead>
                               </TableRow>
-                            )
-                          })}
-                        </TableBody>
-                      </Table>
-                    </ScrollArea>
-                  )}
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setImportGlobalOpen(false)}>
-                    Fechar
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                            </TableHeader>
+                            <TableBody>
+                              {importGlobalFiltrados.map((r) => {
+                                const ja = globalIdsJaImportados.has(r.id)
+                                const niv = r.nivel
+                                  ? NIVEL_LABEL[r.nivel as keyof typeof NIVEL_LABEL] ?? r.nivel
+                                  : '—'
+                                return (
+                                  <TableRow key={r.id}>
+                                    <TableCell>
+                                      <span className="font-medium line-clamp-2">{r.titulo}</span>
+                                      <span className="sm:hidden text-xs text-muted-foreground block mt-1">
+                                        {r.categoria ?? '—'} · v{r.versao}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="hidden sm:table-cell text-muted-foreground">
+                                      {r.categoria ?? '—'}
+                                    </TableCell>
+                                    <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
+                                      {niv}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      {ja ? (
+                                        <span className="text-xs text-muted-foreground">Já importado</span>
+                                      ) : (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="secondary"
+                                          className="gap-1"
+                                          disabled={importingGlobalId !== null}
+                                          onClick={() => importarDoGlobal(r.id)}
+                                        >
+                                          <Download className="w-3.5 h-3.5" />
+                                          {importingGlobalId === r.id ? '...' : 'Importar'}
+                                        </Button>
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                            </TableBody>
+                          </Table>
+                        </ScrollArea>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button type="button" variant="outline" onClick={() => setImportGlobalOpen(false)}>
+                        Fechar
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </>
+            )}
 
             <Button
               onClick={openNewSheet}
@@ -1872,7 +1913,7 @@ export default function CatalogoPage() {
                   )}
                 />
               </div>
-              {statusWatch === 'ativo' && (
+              {poolGlobalUiDisponivel && statusWatch === 'ativo' && (
                 <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
                   <div className="flex items-start gap-3">
                     <Controller
@@ -1951,42 +1992,44 @@ export default function CatalogoPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={poolTermoDialogOpen} onOpenChange={setPoolTermoDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="font-serif text-xl">Catálogo global TrainHub</DialogTitle>
-            <DialogDescription>Termo de consentimento — versão {POOL_GLOBAL_TERMO_VERSAO}</DialogDescription>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{POOL_GLOBAL_TERMO_TEXTO}</p>
-          <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setPoolTermoDialogOpen(false)
-                setValue('pool_global_consentimento', false)
-                setPoolTermoAceito(false)
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
-              onClick={() => {
-                setPoolTermoAceito(true)
-                setValue('pool_global_consentimento', true)
-                setPoolTermoDialogOpen(false)
-                if (statusWatch !== 'ativo') {
-                  toast.message('Altere o status para "Ativo" para enfileirar no global.')
-                }
-              }}
-            >
-              Li e aceito
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {poolGlobalUiDisponivel && (
+        <Dialog open={poolTermoDialogOpen} onOpenChange={setPoolTermoDialogOpen}>
+          <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="font-serif text-xl">Catálogo global TrainHub</DialogTitle>
+              <DialogDescription>Termo de consentimento — versão {POOL_GLOBAL_TERMO_VERSAO}</DialogDescription>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{POOL_GLOBAL_TERMO_TEXTO}</p>
+            <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setPoolTermoDialogOpen(false)
+                  setValue('pool_global_consentimento', false)
+                  setPoolTermoAceito(false)
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
+                onClick={() => {
+                  setPoolTermoAceito(true)
+                  setValue('pool_global_consentimento', true)
+                  setPoolTermoDialogOpen(false)
+                  if (statusWatch !== 'ativo') {
+                    toast.message('Altere o status para "Ativo" para enfileirar no global.')
+                  }
+                }}
+              >
+                Li e aceito
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Alert Excluir */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

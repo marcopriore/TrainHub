@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUser } from '@/lib/use-user'
+import { useCatalogoModuloPlataforma } from '@/lib/use-catalogo-modulo-plataforma'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -10,6 +11,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 export default function CatalogoLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { user, loading, getActiveTenantId } = useUser()
+  const { catalogoModuloPlataformaAtivo, loadingCatalogoPlataforma } =
+    useCatalogoModuloPlataforma()
   const activeTenantId = getActiveTenantId()
 
   const [modulosAtivos, setModulosAtivos] = useState<Record<string, boolean>>({})
@@ -54,6 +57,12 @@ export default function CatalogoLayout({ children }: { children: React.ReactNode
       router.replace('/login')
       return
     }
+    if (loadingCatalogoPlataforma) return
+    if (!catalogoModuloPlataformaAtivo) {
+      toast.error('O catálogo de treinamentos está desativado na plataforma.')
+      router.replace('/dashboard')
+      return
+    }
     if (user.isMaster()) return
     if (loadingModulos) return
     if (modulosAtivos['catalogo'] !== true) {
@@ -69,7 +78,15 @@ export default function CatalogoLayout({ children }: { children: React.ReactNode
       toast.error('Você não tem permissão para acessar o catálogo. Peça ao administrador um perfil com acesso à vitrine.')
       router.replace('/dashboard')
     }
-  }, [loading, user, loadingModulos, modulosAtivos, router])
+  }, [
+    loading,
+    user,
+    loadingModulos,
+    modulosAtivos,
+    router,
+    loadingCatalogoPlataforma,
+    catalogoModuloPlataformaAtivo,
+  ])
 
   if (loading || !user) {
     return (
@@ -79,6 +96,19 @@ export default function CatalogoLayout({ children }: { children: React.ReactNode
         <Skeleton className="h-8 w-full bg-white/10" />
       </div>
     )
+  }
+
+  if (loadingCatalogoPlataforma) {
+    return (
+      <div className="min-h-screen bg-[#03120e] p-6 space-y-4 max-w-7xl mx-auto">
+        <Skeleton className="h-10 w-64 bg-white/10" />
+        <Skeleton className="h-64 w-full rounded-2xl bg-white/10" />
+      </div>
+    )
+  }
+
+  if (!catalogoModuloPlataformaAtivo) {
+    return null
   }
 
   const podePerfilCatalogo =

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useUser } from '@/lib/use-user'
+import { useCatalogoModuloPlataforma } from '@/lib/use-catalogo-modulo-plataforma'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
 import { AppShell } from '@/components/app-shell'
@@ -11,6 +12,8 @@ export default function GestaoLayout({ children }: { children: React.ReactNode }
   const router = useRouter()
   const pathname = usePathname()
   const { user, loading, getActiveTenantId } = useUser()
+  const { catalogoModuloPlataformaAtivo, loadingCatalogoPlataforma } =
+    useCatalogoModuloPlataforma()
   const activeTenantId = getActiveTenantId()
 
   const [modulosAtivos, setModulosAtivos] = useState<Record<string, boolean>>({})
@@ -58,6 +61,14 @@ export default function GestaoLayout({ children }: { children: React.ReactNode }
       return
     }
 
+    if (!loadingCatalogoPlataforma && !catalogoModuloPlataformaAtivo) {
+      const bloqueado = pathname?.includes('/gestao/configuracoes/opt-in-globais')
+      if (bloqueado) {
+        toast.error('O catálogo de treinamentos está desativado na plataforma.')
+        router.replace('/dashboard/gestao')
+      }
+    }
+
     if (user.isMaster()) return
     if (loadingModulos || !modulosCarregados) return
 
@@ -71,7 +82,17 @@ export default function GestaoLayout({ children }: { children: React.ReactNode }
       )
       router.replace('/dashboard')
     }
-  }, [loading, user, loadingModulos, modulosCarregados, modulosAtivos, pathname, router])
+  }, [
+    loading,
+    user,
+    loadingModulos,
+    modulosCarregados,
+    modulosAtivos,
+    pathname,
+    router,
+    loadingCatalogoPlataforma,
+    catalogoModuloPlataformaAtivo,
+  ])
 
   if (loading || !user) {
     return <>{children}</>

@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ChevronLeft, Check, X, GraduationCap, EyeOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 import { useUser } from '@/lib/use-user'
+import { useCatalogoModuloPlataforma } from '@/lib/use-catalogo-modulo-plataforma'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -67,7 +69,10 @@ type GlobalPublicadoRow = {
 }
 
 export default function CatalogoGlobalModeracaoPage() {
+  const router = useRouter()
   const { user, loading: userLoading } = useUser()
+  const { catalogoModuloPlataformaAtivo, loadingCatalogoPlataforma } =
+    useCatalogoModuloPlataforma()
   const [rows, setRows] = useState<SubmissaoRow[]>([])
   const [publicados, setPublicados] = useState<GlobalPublicadoRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -118,6 +123,23 @@ export default function CatalogoGlobalModeracaoPage() {
     if (!userLoading && user?.isMaster?.()) load()
     if (!userLoading && !user?.isMaster?.()) setLoading(false)
   }, [userLoading, user?.isMaster, load])
+
+  useEffect(() => {
+    if (userLoading || loadingCatalogoPlataforma) return
+    if (catalogoModuloPlataformaAtivo) return
+    toast.info('O módulo Catálogo de Treinamentos está desativado na plataforma.')
+    if (user?.isMaster?.()) {
+      router.replace('/dashboard/configuracoes/plataforma')
+    } else {
+      router.replace('/dashboard/configuracoes')
+    }
+  }, [
+    userLoading,
+    loadingCatalogoPlataforma,
+    catalogoModuloPlataformaAtivo,
+    user?.isMaster,
+    router,
+  ])
 
   const aprovar = async (sub: SubmissaoRow) => {
     if (!user?.id) return

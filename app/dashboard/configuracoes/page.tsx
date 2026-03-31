@@ -11,8 +11,10 @@ import {
   GraduationCap,
   ChevronLeft,
   Library,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useUser } from '@/lib/use-user'
+import { useCatalogoModuloPlataforma } from '@/lib/use-catalogo-modulo-plataforma'
 import { NotificacoesSino } from '@/components/notificacoes-sino'
 import { Button } from '@/components/ui/button'
 
@@ -22,6 +24,8 @@ const COR_TENANTS = '#8b5cf6'
 
 export default function ConfiguracoesPage() {
   const { user, loading } = useUser()
+  const { catalogoModuloPlataformaAtivo, loadingCatalogoPlataforma } =
+    useCatalogoModuloPlataforma()
 
   const initials = user?.nome
     ? user.nome
@@ -174,19 +178,19 @@ export default function ConfiguracoesPage() {
 
           {user?.isMaster?.() && (
             <Link
-              href="/dashboard/configuracoes/catalogo-global"
+              href="/dashboard/configuracoes/plataforma"
               className="h-44 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 hover:shadow-md hover:border-[#00C9A7]/40 transition-all duration-200 group"
             >
               <div
                 className="w-12 h-12 rounded-xl flex items-center justify-center"
                 style={{ backgroundColor: `${COR_PERFIS}1a`, color: COR_PERFIS }}
               >
-                <Library className="w-6 h-6" />
+                <SlidersHorizontal className="w-6 h-6" />
               </div>
               <div>
-                <h2 className="font-semibold text-lg text-foreground">Catálogo global</h2>
+                <h2 className="font-semibold text-lg text-foreground">Plataforma</h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Moderação da fila de publicação no pool global TrainHub
+                  Ativar ou ocultar o módulo Catálogo de Treinamentos para todos os tenants
                 </p>
               </div>
               <div className="flex items-center gap-1 text-sm font-medium" style={{ color: COR_PERFIS }}>
@@ -195,6 +199,32 @@ export default function ConfiguracoesPage() {
               </div>
             </Link>
           )}
+
+          {user?.isMaster?.() &&
+            !loadingCatalogoPlataforma &&
+            catalogoModuloPlataformaAtivo && (
+              <Link
+                href="/dashboard/configuracoes/catalogo-global"
+                className="h-44 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 hover:shadow-md hover:border-[#00C9A7]/40 transition-all duration-200 group"
+              >
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `${COR_PERFIS}1a`, color: COR_PERFIS }}
+                >
+                  <Library className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-lg text-foreground">Catálogo global</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Moderação da fila de publicação no pool global TrainHub
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 text-sm font-medium" style={{ color: COR_PERFIS }}>
+                  <span>Acessar</span>
+                  <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                </div>
+              </Link>
+            )}
         </div>
       </main>
     </div>

@@ -19,6 +19,7 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { useUser } from '@/lib/use-user'
+import { useCatalogoModuloPlataforma } from '@/lib/use-catalogo-modulo-plataforma'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -56,6 +57,8 @@ export default function TenantEditPage() {
   const params = useParams()
   const id = params?.id as string | undefined
   const { user, loading: userLoading } = useUser()
+  const { catalogoModuloPlataformaAtivo, loadingCatalogoPlataforma } =
+    useCatalogoModuloPlataforma()
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -381,34 +384,36 @@ export default function TenantEditPage() {
             </div>
 
             {/* Catálogo de Treinamentos */}
-            <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{
-                    backgroundColor: `${COR_CATALOGO}20`,
-                    color: COR_CATALOGO,
-                  }}
-                >
-                  <Library className="w-5 h-5" />
+            {!loadingCatalogoPlataforma && catalogoModuloPlataformaAtivo && (
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{
+                      backgroundColor: `${COR_CATALOGO}20`,
+                      color: COR_CATALOGO,
+                    }}
+                  >
+                    <Library className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">
+                      Catálogo de Treinamentos
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Vitrine de programas, preferências, favoritos e avaliações internas
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="font-medium text-foreground">
-                    Catálogo de Treinamentos
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Vitrine de programas, preferências, favoritos e avaliações internas
-                  </p>
-                </div>
+                <Switch
+                  checked={modulos.catalogo}
+                  onCheckedChange={(checked) =>
+                    toggleModulo('catalogo', checked === true)
+                  }
+                  disabled={moduloSaving === 'catalogo'}
+                />
               </div>
-              <Switch
-                checked={modulos.catalogo}
-                onCheckedChange={(checked) =>
-                  toggleModulo('catalogo', checked === true)
-                }
-                disabled={moduloSaving === 'catalogo'}
-              />
-            </div>
+            )}
 
             {/* Avaliações e Certificados */}
             <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
