@@ -65,6 +65,11 @@ export function CatalogoCard({
             {item.categoria}
           </span>
         ) : null}
+        {item.origem_global ? (
+          <span className="absolute top-2 right-2 text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#00C9A7]/90 text-white backdrop-blur-sm">
+            Global
+          </span>
+        ) : null}
       </div>
       <div className="p-3 space-y-1">
         <h3 className="text-sm font-semibold text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">

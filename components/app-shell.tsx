@@ -23,6 +23,7 @@ import {
   Library,
   Tag,
   ClipboardCheck,
+  Globe,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TenantSelector } from '@/components/tenant-selector'
@@ -52,6 +53,7 @@ const configNavItems = [
   { href: '/dashboard/gestao/configuracoes/setores', label: 'Setores', icon: Building2, permission: 'gerenciar_setores', masterOnly: false },
   { href: '/dashboard/gestao/configuracoes/empresas-parceiras', label: 'Empresas Parceiras', icon: Briefcase, permission: 'gerenciar_empresas_parceiras', masterOnly: false },
   { href: '/dashboard/gestao/configuracoes/categorias', label: 'Categorias', icon: Tag, permission: 'gerenciar_categorias', masterOnly: false },
+  { href: '/dashboard/gestao/configuracoes/opt-in-globais', label: 'Conteúdo global (vitrine)', icon: Globe, permission: 'gerenciar_catalogo', masterOnly: false },
 ]
 
 interface SidebarProps {

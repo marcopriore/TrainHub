@@ -7,6 +7,7 @@
 
 const FORCE_RESET = process.argv.includes('--reset')
 
+import { randomUUID } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { readFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
@@ -663,6 +664,207 @@ async function run() {
       }
     }
     console.log('✓ Catálogo: 15 programas seed; imagens Unsplash aplicadas por título (re-run seguro).')
+  }
+
+  /* Demo pool global: opt-in por categoria, itens publicados no global, fila de moderação (pendentes).
+   * A tela Master só lista submissões status=pendente (reprovadas ficam só no banco para auditoria). */
+  {
+    const POOL_TERMO_VERSAO = '2026-03-30'
+    const { data: masterRow } = await supabase
+      .from('usuarios')
+      .select('id')
+      .eq('is_master', true)
+      .limit(1)
+      .maybeSingle()
+    const masterId = (masterRow as { id: string } | null)?.id ?? null
+
+    for (const nome of ['Gestão', 'Soft Skills', 'Tecnologia'] as const) {
+      const { error: optErr } = await supabase.from('tenant_catalogo_global_categorias').upsert(
+        {
+          tenant_id: tenantId,
+          categoria: nome,
+          opt_in: true,
+          atualizado_em: new Date().toISOString(),
+        },
+        { onConflict: 'tenant_id,categoria' }
+      )
+      if (optErr) console.warn('Aviso: opt-in vitrine (', nome, '):', optErr.message)
+      else console.log('✓ Opt-in vitrine global:', nome)
+    }
+
+    const demoGlobals = [
+      {
+        titulo: '[DEMO GLOBAL] Fundamentos de OKR',
+        categoria: 'Gestão',
+        nivel: 'basico' as const,
+        modalidade: 'online' as const,
+        carga_horaria: 8,
+        objetivo: 'Alinhar times com objetivos e resultados mensuráveis.',
+        conteudo_programatico:
+          'Ciclos de OKR, definição de resultados-chave, cadência de revisão e erros comuns.',
+        imagem_url:
+          'https://images.unsplash.com/photo-1552664730-d307ca884978?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        titulo: '[DEMO GLOBAL] Feedback 1:1 eficaz',
+        categoria: 'Soft Skills',
+        nivel: 'intermediario' as const,
+        modalidade: 'hibrido' as const,
+        carga_horaria: 6,
+        objetivo: 'Conduzir conversas 1:1 com clareza, escuta e acordos.',
+        conteudo_programatico:
+          'Preparação, escuta ativa, registro de compromissos e acompanhamento.',
+        imagem_url:
+          'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1200&q=80&auto=format&fit=crop',
+      },
+      {
+        titulo: '[DEMO GLOBAL] Git e fluxo de branches',
+        categoria: 'Tecnologia',
+        nivel: 'basico' as const,
+        modalidade: 'online' as const,
+        carga_horaria: 10,
+        objetivo: 'Versionar código com Git em equipe com boas práticas.',
+        conteudo_programatico: 'Commits, branches, merge/rebase, pull requests e resolução de conflitos.',
+        imagem_url:
+          'https://images.unsplash.com/photo-1618401471417-9228d258f40f?w=1200&q=80&auto=format&fit=crop',
+      },
+    ]
+
+    for (const g of demoGlobals) {
+      const { data: exists } = await supabase
+        .from('catalogo_treinamentos_globais')
+        .select('id')
+        .eq('titulo', g.titulo)
+        .maybeSingle()
+      if (exists) continue
+
+      const linhagemId = randomUUID()
+      const { error: gErr } = await supabase.from('catalogo_treinamentos_globais').insert({
+        linhagem_id: linhagemId,
+        versao: 1,
+        titulo: g.titulo,
+        conteudo_programatico: g.conteudo_programatico,
+        objetivo: g.objetivo,
+        carga_horaria: g.carga_horaria,
+        categoria: g.categoria,
+        nivel: g.nivel,
+        modalidade: g.modalidade,
+        imagem_url: g.imagem_url,
+        status: 'publicado',
+        origem_tenant_id: tenantId,
+        aprovado_em: new Date().toISOString(),
+        aprovado_por: masterId,
+      })
+      if (gErr) console.warn('Aviso: inserir demo global', g.titulo, gErr.message)
+      else console.log('✓ Catálogo global publicado (demo):', g.titulo)
+    }
+
+    async function ensureDemoSubmissao(opts: {
+      tituloCatalogo: string
+      categoria: string
+      status: 'pendente' | 'reprovado'
+      motivoReprovacao?: string
+    }) {
+      let localId: string | null = null
+      const { data: loc } = await supabase
+        .from('catalogo_treinamentos')
+        .select('id, pool_global_linhagem_id')
+        .eq('tenant_id', tenantId)
+        .eq('titulo', opts.tituloCatalogo)
+        .maybeSingle()
+
+      if (loc) {
+        localId = loc.id
+        if (!loc.pool_global_linhagem_id) {
+          await supabase
+            .from('catalogo_treinamentos')
+            .update({ pool_global_linhagem_id: localId })
+            .eq('id', localId)
+        }
+      } else {
+        const { data: ins, error: insErr } = await supabase
+          .from('catalogo_treinamentos')
+          .insert({
+            tenant_id: tenantId,
+            titulo: opts.tituloCatalogo,
+            categoria: opts.categoria,
+            nivel: 'basico',
+            modalidade: 'online',
+            carga_horaria: 4,
+            objetivo: 'Registro de demonstração do fluxo pool global (seed).',
+            conteudo_programatico: 'Texto sintético para testes; pode editar ou excluir após validar o fluxo.',
+            status: 'ativo',
+            pool_global_consentimento: true,
+            pool_global_consentimento_em: new Date().toISOString(),
+            pool_global_termo_versao: POOL_TERMO_VERSAO,
+          })
+          .select('id')
+          .single()
+        if (insErr || !ins) {
+          console.warn('Aviso: demo fila — catálogo', opts.tituloCatalogo, insErr?.message)
+          return
+        }
+        localId = ins.id
+        await supabase
+          .from('catalogo_treinamentos')
+          .update({ pool_global_linhagem_id: localId })
+          .eq('id', localId)
+      }
+
+      if (!localId) return
+
+      const { data: subRow } = await supabase
+        .from('catalogo_global_submissoes')
+        .select('id')
+        .eq('catalogo_local_id', localId)
+        .maybeSingle()
+      if (subRow) return
+
+      const payload = {
+        tenant_id: tenantId,
+        catalogo_local_id: localId,
+        linhagem_id: localId,
+        versao: 1,
+        titulo: opts.tituloCatalogo,
+        conteudo_programatico: 'Conteúdo demo moderação.',
+        objetivo: 'Objetivo demo moderação.',
+        carga_horaria: 4,
+        categoria: opts.categoria,
+        nivel: 'basico',
+        modalidade: 'online',
+        imagem_url: null as string | null,
+        status: opts.status,
+        revisado_por: opts.status === 'reprovado' ? masterId : null,
+        revisado_em: opts.status === 'reprovado' ? new Date().toISOString() : null,
+        motivo_reprovacao: opts.status === 'reprovado' ? opts.motivoReprovacao ?? 'Reprovado (seed).' : null,
+      }
+      const { error: sErr } = await supabase.from('catalogo_global_submissoes').insert(payload)
+      if (sErr) console.warn('Aviso: demo submissão', opts.tituloCatalogo, sErr.message)
+      else if (opts.status === 'pendente')
+        console.log('✓ Fila Master (pendente):', opts.tituloCatalogo)
+      else console.log('✓ Histórico fila (reprovado, não aparece na lista Master):', opts.tituloCatalogo)
+    }
+
+    await ensureDemoSubmissao({
+      tituloCatalogo: '[POOL DEMO] Moderação — Pendente A',
+      categoria: 'Gestão',
+      status: 'pendente',
+    })
+    await ensureDemoSubmissao({
+      tituloCatalogo: '[POOL DEMO] Moderação — Pendente B',
+      categoria: 'Soft Skills',
+      status: 'pendente',
+    })
+    await ensureDemoSubmissao({
+      tituloCatalogo: '[POOL DEMO] Moderação — Reprovado (histórico)',
+      categoria: 'Tecnologia',
+      status: 'reprovado',
+      motivoReprovacao: 'Exemplo de reprovação gerada pelo seed (conteúdo fictício).',
+    })
+
+    console.log(
+      '✓ Pool global demo: 3 títulos no catálogo global + 2 pendentes na fila Master + 1 reprovado (só no banco).'
+    )
   }
 
   console.log('\n✅ Seed concluído com sucesso para o tenant TrainHub Master.')

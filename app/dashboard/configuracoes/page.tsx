@@ -10,6 +10,7 @@ import {
   ChevronRight,
   GraduationCap,
   ChevronLeft,
+  Library,
 } from 'lucide-react'
 import { useUser } from '@/lib/use-user'
 import { NotificacoesSino } from '@/components/notificacoes-sino'
@@ -165,6 +166,30 @@ export default function ConfiguracoesPage() {
                 </p>
               </div>
               <div className="flex items-center gap-1 text-sm font-medium" style={{ color: COR_TENANTS }}>
+                <span>Acessar</span>
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            </Link>
+          )}
+
+          {user?.isMaster?.() && (
+            <Link
+              href="/dashboard/configuracoes/catalogo-global"
+              className="h-44 bg-card rounded-2xl border border-border shadow-sm flex flex-col justify-between p-6 hover:shadow-md hover:border-[#00C9A7]/40 transition-all duration-200 group"
+            >
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: `${COR_PERFIS}1a`, color: COR_PERFIS }}
+              >
+                <Library className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-lg text-foreground">Catálogo global</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Moderação da fila de publicação no pool global TrainHub
+                </p>
+              </div>
+              <div className="flex items-center gap-1 text-sm font-medium" style={{ color: COR_PERFIS }}>
                 <span>Acessar</span>
                 <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </div>

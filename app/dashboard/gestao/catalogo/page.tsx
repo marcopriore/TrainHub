@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { Plus, Pencil, Trash2, Award, Upload } from 'lucide-react'
+import { Plus, Pencil, Trash2, Award, Upload, Globe, Download } from 'lucide-react'
 import { useForm, Controller } from 'react-hook-form'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase'
@@ -29,9 +29,18 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  POOL_GLOBAL_TERMO_TEXTO,
+  POOL_GLOBAL_TERMO_VERSAO,
+  termoPoolGlobalAtual,
+} from '@/lib/catalogo-pool-global'
+import { NIVEL_LABEL } from '@/lib/catalogo'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +52,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 type CamposPosicoes = {
   corpo: { x: number; y: number; texto: string; fontSize: number; maxWidth: number }
@@ -225,6 +235,10 @@ interface CatalogoItem {
   criado_em: string
   atualizado_em: string
   criado_por: string | null
+  pool_global_consentimento?: boolean | null
+  pool_global_consentimento_em?: string | null
+  pool_global_termo_versao?: string | null
+  pool_global_linhagem_id?: string | null
 }
 
 const statusConfig: Record<string, { label: string; className: string }> = {
@@ -261,6 +275,7 @@ type FormValues = {
   modalidade: string
   status: string
   imagem_url: string
+  pool_global_consentimento: boolean
 }
 
 export default function CatalogoPage() {
@@ -292,6 +307,14 @@ export default function CatalogoPage() {
   const previewRef = useRef<HTMLDivElement | null>(null)
   const draggingFieldRef = useRef<keyof CamposPosicoes | null>(null)
   const [templateTestingPdf, setTemplateTestingPdf] = useState(false)
+  const [poolTermoDialogOpen, setPoolTermoDialogOpen] = useState(false)
+  const [poolTermoAceito, setPoolTermoAceito] = useState(false)
+  const [importGlobalOpen, setImportGlobalOpen] = useState(false)
+  const [importGlobalLoading, setImportGlobalLoading] = useState(false)
+  const [importGlobalRows, setImportGlobalRows] = useState<CatalogoGlobalRow[]>([])
+  const [importGlobalSearch, setImportGlobalSearch] = useState('')
+  const [importingGlobalId, setImportingGlobalId] = useState<string | null>(null)
+  const [globalIdsJaImportados, setGlobalIdsJaImportados] = useState<Set<string>>(new Set())
 
   const supabase = createClient()
 
@@ -312,6 +335,8 @@ export default function CatalogoPage() {
     handleSubmit,
     reset,
     setError,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({
     defaultValues: {
@@ -324,8 +349,18 @@ export default function CatalogoPage() {
       modalidade: '',
       status: 'rascunho',
       imagem_url: '',
+      pool_global_consentimento: false,
     },
   })
+
+  const statusWatch = watch('status')
+
+  useEffect(() => {
+    if (statusWatch !== 'ativo') {
+      setValue('pool_global_consentimento', false)
+      setPoolTermoAceito(false)
+    }
+  }, [statusWatch, setValue])
 
   const categoriasDistintas = useMemo(() => {
     const set = new Set<string>()
@@ -334,6 +369,15 @@ export default function CatalogoPage() {
     })
     return Array.from(set).sort()
   }, [items])
+
+  const importGlobalFiltrados = useMemo(() => {
+    const t = importGlobalSearch.trim().toLowerCase()
+    if (!t) return importGlobalRows
+    return importGlobalRows.filter(
+      (r) =>
+        r.titulo.toLowerCase().includes(t) || (r.categoria ?? '').toLowerCase().includes(t)
+    )
+  }, [importGlobalRows, importGlobalSearch])
 
   const fetchCatalogo = async (silent = false) => {
     if (!activeTenantId) {
@@ -638,6 +682,7 @@ export default function CatalogoPage() {
 
   const openNewSheet = () => {
     setEditingItem(null)
+    setPoolTermoAceito(false)
     reset({
       titulo: '',
       conteudo_programatico: '',
@@ -648,12 +693,16 @@ export default function CatalogoPage() {
       modalidade: '',
       status: 'rascunho',
       imagem_url: '',
+      pool_global_consentimento: false,
     })
     setSheetOpen(true)
   }
 
   const openEditSheet = (item: CatalogoItem) => {
     setEditingItem(item)
+    setPoolTermoAceito(
+      termoPoolGlobalAtual(!!item.pool_global_consentimento, item.pool_global_termo_versao ?? null)
+    )
     reset({
       titulo: item.titulo ?? '',
       conteudo_programatico: item.conteudo_programatico ?? '',
@@ -664,6 +713,7 @@ export default function CatalogoPage() {
       modalidade: item.modalidade ?? '',
       status: item.status ?? 'rascunho',
       imagem_url: item.imagem_url ?? '',
+      pool_global_consentimento: !!item.pool_global_consentimento,
     })
     setSheetOpen(true)
   }
@@ -671,6 +721,95 @@ export default function CatalogoPage() {
   const closeSheet = () => {
     setSheetOpen(false)
     setEditingItem(null)
+  }
+
+  const loadImportGlobalLista = async () => {
+    if (!activeTenantId) return
+    setImportGlobalLoading(true)
+    try {
+      const [globRes, localRes] = await Promise.all([
+        supabase
+          .from('catalogo_treinamentos_globais')
+          .select('id, titulo, categoria, nivel, modalidade, carga_horaria, versao')
+          .eq('status', 'publicado')
+          .order('titulo', { ascending: true }),
+        supabase
+          .from('catalogo_treinamentos')
+          .select('copiado_de_global_id')
+          .eq('tenant_id', activeTenantId)
+          .not('copiado_de_global_id', 'is', null),
+      ])
+      if (globRes.error) throw globRes.error
+      if (localRes.error) throw localRes.error
+      setImportGlobalRows((globRes.data as CatalogoGlobalRow[]) ?? [])
+      const s = new Set<string>()
+      for (const r of localRes.data ?? []) {
+        const id = (r as { copiado_de_global_id: string | null }).copiado_de_global_id
+        if (id) s.add(id)
+      }
+      setGlobalIdsJaImportados(s)
+    } catch (e) {
+      console.error(e)
+      toast.error('Não foi possível carregar o catálogo global.')
+      setImportGlobalRows([])
+    } finally {
+      setImportGlobalLoading(false)
+    }
+  }
+
+  const importarDoGlobal = async (globalId: string) => {
+    if (!activeTenantId || !user?.id) return
+    if (globalIdsJaImportados.has(globalId)) return
+    setImportingGlobalId(globalId)
+    try {
+      const { data: full, error: fe } = await supabase
+        .from('catalogo_treinamentos_globais')
+        .select(
+          'id, titulo, conteudo_programatico, objetivo, carga_horaria, categoria, nivel, modalidade, imagem_url'
+        )
+        .eq('id', globalId)
+        .eq('status', 'publicado')
+        .maybeSingle()
+      if (fe) throw fe
+      if (!full) {
+        toast.error('Item não disponível.')
+        return
+      }
+      const row = full as Record<string, unknown>
+      const { error } = await supabase.from('catalogo_treinamentos').insert({
+        tenant_id: activeTenantId,
+        titulo: row.titulo as string,
+        conteudo_programatico: (row.conteudo_programatico as string | null) ?? null,
+        objetivo: (row.objetivo as string | null) ?? null,
+        carga_horaria: (row.carga_horaria as number | null) ?? null,
+        categoria: (row.categoria as string | null) ?? null,
+        nivel: (row.nivel as string | null) ?? null,
+        modalidade: (row.modalidade as string | null) ?? null,
+        imagem_url: (row.imagem_url as string | null) ?? null,
+        status: 'rascunho',
+        criado_por: user.id,
+        copiado_de_global_id: row.id as string,
+        pool_global_consentimento: false,
+        pool_global_consentimento_em: null,
+        pool_global_termo_versao: null,
+        pool_global_linhagem_id: null,
+      })
+      if (error) throw error
+      toast.success('Cópia criada em rascunho. Revise os dados e publique quando quiser.')
+      setGlobalIdsJaImportados((prev) => {
+        const next = new Set(prev)
+        next.add(globalId)
+        return next
+      })
+      setImportGlobalOpen(false)
+      setImportGlobalSearch('')
+      fetchCatalogo()
+    } catch (e) {
+      console.error(e)
+      toast.error('Não foi possível importar.')
+    } finally {
+      setImportingGlobalId(null)
+    }
   }
 
   const onSave = async (values: FormValues) => {
@@ -688,8 +827,32 @@ export default function CatalogoPage() {
       return
     }
 
+    const consentEfetivo = values.status === 'ativo' ? values.pool_global_consentimento : false
+    if (values.status === 'ativo' && consentEfetivo) {
+      const aceiteOk =
+        poolTermoAceito ||
+        (!!editingItem &&
+          termoPoolGlobalAtual(
+            !!editingItem.pool_global_consentimento,
+            editingItem.pool_global_termo_versao ?? null
+          ))
+      if (!aceiteOk) {
+        toast.error('Leia e aceite o termo do catálogo global antes de salvar.')
+        setPoolTermoDialogOpen(true)
+        return
+      }
+    }
+
     setSubmitting(true)
     try {
+      const agora = new Date().toISOString()
+      const consentEm =
+        consentEfetivo
+          ? editingItem?.pool_global_consentimento
+            ? editingItem.pool_global_consentimento_em ?? agora
+            : agora
+          : null
+
       const payload = {
         titulo: tituloTrimmed,
         conteudo_programatico: values.conteudo_programatico?.trim() || null,
@@ -700,25 +863,91 @@ export default function CatalogoPage() {
         modalidade: values.modalidade || null,
         status: values.status || 'rascunho',
         imagem_url: values.imagem_url?.trim() || null,
-        atualizado_em: new Date().toISOString(),
+        atualizado_em: agora,
+        pool_global_consentimento: consentEfetivo,
+        pool_global_consentimento_em: consentEm,
+        pool_global_termo_versao: consentEfetivo ? POOL_GLOBAL_TERMO_VERSAO : null,
       }
 
+      let catalogId: string
+      let linhagemId: string
+
       if (editingItem) {
+        linhagemId = editingItem.pool_global_linhagem_id ?? editingItem.id
         const { error } = await supabase
           .from('catalogo_treinamentos')
-          .update(payload)
+          .update({
+            ...payload,
+            pool_global_linhagem_id: linhagemId,
+          })
           .eq('id', editingItem.id)
         if (error) throw error
-        toast.success('Treinamento atualizado com sucesso.')
+        catalogId = editingItem.id
       } else {
-        const { error } = await supabase.from('catalogo_treinamentos').insert({
-          ...payload,
-          tenant_id: activeTenantId,
-          criado_por: user?.id ?? null,
-        })
+        const { data: inserted, error } = await supabase
+          .from('catalogo_treinamentos')
+          .insert({
+            ...payload,
+            pool_global_linhagem_id: null,
+            tenant_id: activeTenantId,
+            criado_por: user?.id ?? null,
+          })
+          .select('id')
+          .single()
         if (error) throw error
-        toast.success('Treinamento cadastrado com sucesso.')
+        catalogId = inserted.id
+        linhagemId = catalogId
+        const { error: lineageErr } = await supabase
+          .from('catalogo_treinamentos')
+          .update({ pool_global_linhagem_id: linhagemId })
+          .eq('id', catalogId)
+        if (lineageErr) throw lineageErr
       }
+
+      let mensagemOk = editingItem
+        ? 'Treinamento atualizado com sucesso.'
+        : 'Treinamento cadastrado com sucesso.'
+
+      if (values.status === 'ativo' && consentEfetivo && !user?.isMaster?.()) {
+        const { data: maxGlob } = await supabase
+          .from('catalogo_treinamentos_globais')
+          .select('versao')
+          .eq('linhagem_id', linhagemId)
+          .order('versao', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        const nextVersao = (maxGlob?.versao ?? 0) + 1
+
+        await supabase
+          .from('catalogo_global_submissoes')
+          .delete()
+          .eq('catalogo_local_id', catalogId)
+          .eq('status', 'pendente')
+
+        const { error: subErr } = await supabase.from('catalogo_global_submissoes').insert({
+          tenant_id: activeTenantId,
+          catalogo_local_id: catalogId,
+          linhagem_id: linhagemId,
+          versao: nextVersao,
+          titulo: tituloTrimmed,
+          conteudo_programatico: values.conteudo_programatico?.trim() || null,
+          objetivo: values.objetivo?.trim() || null,
+          carga_horaria: values.carga_horaria,
+          categoria: values.categoria?.trim() || null,
+          nivel: values.nivel || null,
+          modalidade: values.modalidade || null,
+          imagem_url: values.imagem_url?.trim() || null,
+          status: 'pendente',
+        })
+        if (subErr) {
+          console.error('Pool global — submissão:', subErr)
+          toast.error('Salvo localmente, mas não foi possível enviar à fila global do TrainHub.')
+        } else {
+          mensagemOk += ' Enviado à moderação do catálogo global.'
+        }
+      }
+
+      toast.success(mensagemOk)
       closeSheet()
       fetchCatalogo()
     } catch (error) {
@@ -1182,6 +1411,119 @@ export default function CatalogoPage() {
             </Dialog>
 
             <Button
+              type="button"
+              variant="outline"
+              disabled={!activeTenantId}
+              className="w-full sm:w-auto shrink-0 border-[#00C9A7]/60 text-[#00C9A7] hover:bg-[#00C9A7]/5"
+              onClick={() => {
+                setImportGlobalOpen(true)
+                void loadImportGlobalLista()
+              }}
+            >
+              <Globe className="w-4 h-4 mr-1.5" />
+              Importar do global
+            </Button>
+            <Dialog
+              open={importGlobalOpen}
+              onOpenChange={(open) => {
+                setImportGlobalOpen(open)
+                if (!open) setImportGlobalSearch('')
+                if (open) void loadImportGlobalLista()
+              }}
+            >
+              <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
+                <DialogHeader>
+                  <DialogTitle className="font-serif text-2xl">Importar do catálogo global</DialogTitle>
+                  <DialogDescription>
+                    Cria um <strong className="text-foreground font-medium">rascunho</strong> no seu catálogo
+                    local com metadados e conteúdo programático. Você pode editar antes de publicar. Cada origem
+                    global só pode ser importada uma vez por tenant (exclua a cópia se precisar importar de
+                    novo).
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3 flex-1 min-h-0 flex flex-col">
+                  <Input
+                    placeholder="Buscar por título ou categoria..."
+                    value={importGlobalSearch}
+                    onChange={(e) => setImportGlobalSearch(e.target.value)}
+                    className="max-w-md"
+                  />
+                  {importGlobalLoading ? (
+                    <div className="space-y-2 py-4">
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                    </div>
+                  ) : importGlobalFiltrados.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-6">
+                      {importGlobalRows.length === 0
+                        ? 'Nenhum treinamento publicado no catálogo global no momento.'
+                        : 'Nenhum resultado para a busca.'}
+                    </p>
+                  ) : (
+                    <ScrollArea className="h-[min(420px,50vh)] border rounded-md">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Título</TableHead>
+                            <TableHead className="hidden sm:table-cell">Categoria</TableHead>
+                            <TableHead className="hidden md:table-cell">Nível</TableHead>
+                            <TableHead className="text-right w-[120px]">Ação</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {importGlobalFiltrados.map((r) => {
+                            const ja = globalIdsJaImportados.has(r.id)
+                            const niv = r.nivel
+                              ? NIVEL_LABEL[r.nivel as keyof typeof NIVEL_LABEL] ?? r.nivel
+                              : '—'
+                            return (
+                              <TableRow key={r.id}>
+                                <TableCell>
+                                  <span className="font-medium line-clamp-2">{r.titulo}</span>
+                                  <span className="sm:hidden text-xs text-muted-foreground block mt-1">
+                                    {r.categoria ?? '—'} · v{r.versao}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="hidden sm:table-cell text-muted-foreground">
+                                  {r.categoria ?? '—'}
+                                </TableCell>
+                                <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
+                                  {niv}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {ja ? (
+                                    <span className="text-xs text-muted-foreground">Já importado</span>
+                                  ) : (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="secondary"
+                                      className="gap-1"
+                                      disabled={importingGlobalId !== null}
+                                      onClick={() => importarDoGlobal(r.id)}
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                      {importingGlobalId === r.id ? '...' : 'Importar'}
+                                    </Button>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setImportGlobalOpen(false)}>
+                    Fechar
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Button
               onClick={openNewSheet}
               className="w-full sm:w-auto shrink-0 bg-[#00C9A7] hover:bg-[#00C9A7]/90"
             >
@@ -1331,7 +1673,19 @@ export default function CatalogoPage() {
                         {sc.label}
                       </span>
                     </TableCell>
-                    <TableCell className="font-medium max-w-52 truncate">{item.titulo}</TableCell>
+                    <TableCell className="font-medium max-w-[14rem]">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="truncate">{item.titulo}</span>
+                        {item.copiado_de_global_id ? (
+                          <span
+                            className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-[#00C9A7]/15 text-[#00C9A7]"
+                            title="Cópia importada do catálogo global"
+                          >
+                            Global
+                          </span>
+                        ) : null}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {item.categoria ?? '—'}
                     </TableCell>
@@ -1518,6 +1872,63 @@ export default function CatalogoPage() {
                   )}
                 />
               </div>
+              {statusWatch === 'ativo' && (
+                <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
+                  <div className="flex items-start gap-3">
+                    <Controller
+                      control={control}
+                      name="pool_global_consentimento"
+                      render={({ field }) => (
+                        <Checkbox
+                          id="pool_global_consent"
+                          checked={field.value}
+                          className="mt-1"
+                          onCheckedChange={(c) => {
+                            const on = c === true
+                            if (on) {
+                              const jaNoDb =
+                                editingItem &&
+                                termoPoolGlobalAtual(
+                                  !!editingItem.pool_global_consentimento,
+                                  editingItem.pool_global_termo_versao ?? null
+                                )
+                              if (jaNoDb) {
+                                field.onChange(true)
+                                setPoolTermoAceito(true)
+                              } else {
+                                setPoolTermoDialogOpen(true)
+                              }
+                            } else {
+                              field.onChange(false)
+                              setPoolTermoAceito(false)
+                            }
+                          }}
+                        />
+                      )}
+                    />
+                    <div className="space-y-1 min-w-0">
+                      <Label
+                        htmlFor="pool_global_consent"
+                        className="text-sm font-medium leading-snug cursor-pointer"
+                      >
+                        Enviar para o catálogo global TrainHub (após aprovação da equipe Master)
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Inclui apenas metadados e conteúdo programático que você cadastrou aqui, sem dados
+                        pessoais. Itens em rascunho ou inativos não entram na fila.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="h-auto p-0 text-xs text-[#00C9A7]"
+                        onClick={() => setPoolTermoDialogOpen(true)}
+                      >
+                        Ler termo de consentimento (versão {POOL_GLOBAL_TERMO_VERSAO})
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="imagem_url">Imagem/Capa (URL)</Label>
                 <Input
@@ -1537,6 +1948,43 @@ export default function CatalogoPage() {
               </div>
             </form>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={poolTermoDialogOpen} onOpenChange={setPoolTermoDialogOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">Catálogo global TrainHub</DialogTitle>
+            <DialogDescription>Termo de consentimento — versão {POOL_GLOBAL_TERMO_VERSAO}</DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{POOL_GLOBAL_TERMO_TEXTO}</p>
+          <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setPoolTermoDialogOpen(false)
+                setValue('pool_global_consentimento', false)
+                setPoolTermoAceito(false)
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="bg-[#00C9A7] hover:bg-[#00C9A7]/90"
+              onClick={() => {
+                setPoolTermoAceito(true)
+                setValue('pool_global_consentimento', true)
+                setPoolTermoDialogOpen(false)
+                if (statusWatch !== 'ativo') {
+                  toast.message('Altere o status para "Ativo" para enfileirar no global.')
+                }
+              }}
+            >
+              Li e aceito
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

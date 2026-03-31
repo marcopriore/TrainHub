@@ -36,6 +36,7 @@ export default function CatalogoExplorePage() {
   const [favoritos, setFavoritos] = useState<Set<string>>(new Set())
   const [historicoNomes, setHistoricoNomes] = useState<string[]>([])
   const [mediasAval, setMediasAval] = useState<Record<string, number>>({})
+  const [globaisItens, setGlobaisItens] = useState<CatalogoItem[]>([])
   const [q, setQ] = useState('')
 
   useEffect(() => {
@@ -127,9 +128,55 @@ export default function CatalogoExplorePage() {
           med[k] = sum[k].t / sum[k].n
         }
         setMediasAval(med)
+
+        const { data: optRows } = await supabase
+          .from('tenant_catalogo_global_categorias')
+          .select('categoria')
+          .eq('tenant_id', activeTenantId)
+          .eq('opt_in', true)
+
+        const catsGlob = (optRows ?? [])
+          .map((r) => (r as { categoria: string }).categoria)
+          .filter(Boolean)
+
+        if (catsGlob.length > 0) {
+          const { data: gData, error: gErr } = await supabase
+            .from('catalogo_treinamentos_globais')
+            .select(
+              'id, titulo, conteudo_programatico, objetivo, carga_horaria, categoria, nivel, modalidade, imagem_url, criado_em, aprovado_em'
+            )
+            .eq('status', 'publicado')
+            .in('categoria', catsGlob)
+
+          if (!gErr && gData) {
+            setGlobaisItens(
+              (gData as Record<string, unknown>[]).map((row) => ({
+                id: row.id as string,
+                tenant_id: activeTenantId,
+                titulo: row.titulo as string,
+                conteudo_programatico: (row.conteudo_programatico as string | null) ?? null,
+                objetivo: (row.objetivo as string | null) ?? null,
+                carga_horaria: (row.carga_horaria as number | null) ?? null,
+                categoria: (row.categoria as string | null) ?? null,
+                nivel: row.nivel as CatalogoItem['nivel'],
+                modalidade: row.modalidade as CatalogoItem['modalidade'],
+                imagem_url: (row.imagem_url as string | null) ?? null,
+                status: 'ativo',
+                criado_em: (row.criado_em as string) ?? (row.aprovado_em as string) ?? '',
+                atualizado_em: row.aprovado_em as string | undefined,
+                origem_global: true,
+              }))
+            )
+          } else {
+            setGlobaisItens([])
+          }
+        } else {
+          setGlobaisItens([])
+        }
       } catch (e) {
         toast.error('Não foi possível carregar o catálogo.')
         setItens([])
+        setGlobaisItens([])
       } finally {
         setLoading(false)
       }
@@ -148,6 +195,17 @@ export default function CatalogoExplorePage() {
         (i.objetivo ?? '').toLowerCase().includes(t)
     )
   }, [itens, q])
+
+  const globaisFiltrados = useMemo(() => {
+    const t = q.trim().toLowerCase()
+    if (!t) return globaisItens
+    return globaisItens.filter(
+      (i) =>
+        i.titulo.toLowerCase().includes(t) ||
+        (i.categoria ?? '').toLowerCase().includes(t) ||
+        (i.objetivo ?? '').toLowerCase().includes(t)
+    )
+  }, [globaisItens, q])
 
   const heroItems = useMemo(() => {
     const pool = filtrados.length > 0 ? filtrados : itens
@@ -257,7 +315,7 @@ export default function CatalogoExplorePage() {
           <Skeleton className="h-56 w-full rounded-2xl bg-white/10" />
           <Skeleton className="h-48 w-full bg-white/10" />
         </div>
-      ) : itens.length === 0 ? (
+      ) : itens.length === 0 && globaisFiltrados.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 p-12 text-center">
           <Library className="w-12 h-12 mx-auto text-[#00C9A7]/85 mb-3" />
           <p className="text-white font-medium">Nenhum treinamento ativo no catálogo</p>
@@ -272,9 +330,16 @@ export default function CatalogoExplorePage() {
         </div>
       ) : (
         <div className="space-y-12">
-          <CatalogoHeroMarquee items={heroItems} basePath={BASE} />
+          {itens.length > 0 && <CatalogoHeroMarquee items={heroItems} basePath={BASE} />}
 
-          {!preferenciasPreenchidas(prefs) ? (
+          {itens.length === 0 && globaisFiltrados.length > 0 && (
+            <p className="text-sm text-slate-400 max-w-xl">
+              Nenhum treinamento interno ativo no momento. Abaixo, o catálogo global liberado para as suas
+              categorias (opt-in do administrador).
+            </p>
+          )}
+
+          {itens.length > 0 && !preferenciasPreenchidas(prefs) ? (
             <div className="rounded-2xl border border-[#00C9A7]/30 bg-[#00C9A7]/[0.08] backdrop-blur-sm p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <h2 className="font-semibold text-white flex items-center gap-2">
@@ -290,7 +355,7 @@ export default function CatalogoExplorePage() {
                 <Link href={`${BASE}/preferencias`}>Preencher preferências</Link>
               </Button>
             </div>
-          ) : (
+          ) : itens.length > 0 ? (
             <CatalogoRow
               onDark
               title="Sugeridos para você"
@@ -306,9 +371,9 @@ export default function CatalogoExplorePage() {
                 ))
               )}
             </CatalogoRow>
-          )}
+          ) : null}
 
-          {favoritosItens.length > 0 && (
+          {itens.length > 0 && favoritosItens.length > 0 && (
             <CatalogoRow onDark title="Salvos para depois" subtitle="Treinamentos que você marcou como favoritos.">
               {favoritosItens.map((item, idx) => (
                 <CatalogoCard key={item.id} item={item} href={`${BASE}/${item.id}`} priority={idx < 2} />
@@ -316,7 +381,7 @@ export default function CatalogoExplorePage() {
             </CatalogoRow>
           )}
 
-          {popularesSorted.length > 0 && (
+          {itens.length > 0 && popularesSorted.length > 0 && (
             <CatalogoRow
               onDark
               title="Bem avaliados pelo time"
@@ -328,13 +393,15 @@ export default function CatalogoExplorePage() {
             </CatalogoRow>
           )}
 
-          <CatalogoRow onDark title="Novidades" subtitle="Programas adicionados recentemente.">
-            {novidades.map((item, idx) => (
-              <CatalogoCard key={item.id} item={item} href={`${BASE}/${item.id}`} priority={idx < 3} />
-            ))}
-          </CatalogoRow>
+          {itens.length > 0 && (
+            <CatalogoRow onDark title="Novidades" subtitle="Programas adicionados recentemente.">
+              {novidades.map((item, idx) => (
+                <CatalogoCard key={item.id} item={item} href={`${BASE}/${item.id}`} priority={idx < 3} />
+              ))}
+            </CatalogoRow>
+          )}
 
-          {curtos.length > 0 && (
+          {itens.length > 0 && curtos.length > 0 && (
             <CatalogoRow onDark title="Até 4 horas" subtitle="Conteúdos mais curtos para encaixar na agenda.">
               {curtos.map((item) => (
                 <CatalogoCard key={item.id} item={item} href={`${BASE}/${item.id}`} />
@@ -342,13 +409,31 @@ export default function CatalogoExplorePage() {
             </CatalogoRow>
           )}
 
-          {porCategoria.map(([categoria, lista]) => (
-            <CatalogoRow onDark key={categoria} title={categoria}>
-              {lista.slice(0, 16).map((item) => (
-                <CatalogoCard key={item.id} item={item} href={`${BASE}/${item.id}`} />
+          {itens.length > 0 &&
+            porCategoria.map(([categoria, lista]) => (
+              <CatalogoRow onDark key={categoria} title={categoria}>
+                {lista.slice(0, 16).map((item) => (
+                  <CatalogoCard key={item.id} item={item} href={`${BASE}/${item.id}`} />
+                ))}
+              </CatalogoRow>
+            ))}
+
+          {globaisFiltrados.length > 0 && (
+            <CatalogoRow
+              onDark
+              title="Catálogo global TrainHub"
+              subtitle="Conteúdos aprovados pela TrainHub, nas categorias que o administrador liberou para a vitrine. Detalhes abertos em página própria (sem vínculo com favoritos ou avaliações internas)."
+            >
+              {globaisFiltrados.map((item, idx) => (
+                <CatalogoCard
+                  key={`g-${item.id}`}
+                  item={item}
+                  href={`${BASE}/global/${item.id}`}
+                  priority={idx < 2}
+                />
               ))}
             </CatalogoRow>
-          ))}
+          )}
         </div>
       )}
     </CatalogoShell>

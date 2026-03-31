@@ -15,6 +15,8 @@ export type CatalogoItem = {
   status: string
   criado_em: string
   atualizado_em?: string
+  /** Conteúdo aprovado no pool global (vitrine); link usa /dashboard/catalogo/global/[id] */
+  origem_global?: boolean
 }
 
 export type UsuarioCatalogoPreferencias = {
